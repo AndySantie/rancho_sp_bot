@@ -16,8 +16,6 @@ const {
 } = require('discord.js');
 
 const { stringify } = require('csv-stringify/sync');
-
-// ✅ IMPORTANTE: path/fs antes do cfg (pra escolher o arquivo certo)
 const path = require('path');
 const fs = require('fs');
 
@@ -727,6 +725,104 @@ client.on(Events.InteractionCreate, async (interaction) => {
     // =====================
     if (interaction.isChatInputCommand()) {
       const cmd = interaction.commandName;
+
+if (cmd === 'anunciar') {
+  // Apenas Gerência/Proprietário
+  if (!isStaff(interaction.member)) {
+    return interaction.reply({ content: '❌ Apenas Gerência/Proprietário.', ephemeral: true });
+  }
+
+  await interaction.deferReply({ ephemeral: true });
+
+  const canal = interaction.options.getChannel('canal', true);
+  const mensagem = interaction.options.getString('mensagem', true);
+  const imagem = interaction.options.getAttachment('imagem', false);
+  const fixar = interaction.options.getBoolean('fixar', false) ?? false;
+
+  const mencionar = interaction.options.getMentionable('mencionar', false);
+  const allowEveryone = interaction.options.getBoolean('everyone', false) ?? false;
+  const allowHere = interaction.options.getBoolean('here', false) ?? false;
+
+  // Canal precisa ser de texto (GuildText ou Announcement). Thread também é text-based, mas aqui preferimos canal normal.
+  if (!canal || !canal.isTextBased?.() || canal.type === ChannelType.DM) {
+    return interaction.editReply('❌ Selecione um canal de texto válido.');
+  }
+
+  const targetChannel = canal;
+
+  // Monta menções com segurança (allowedMentions)
+  let contentMentions = '';
+  const allowedMentions = { parse: [], roles: [], users: [] };
+
+  if (mencionar) {
+    // mentionable pode ser Role, User ou GuildMember
+    if (mencionar.id && mencionar.name !== undefined && mencionar.members !== undefined) {
+      // Role
+      contentMentions += `<@&${mencionar.id}> `;
+      allowedMentions.roles = [mencionar.id];
+    } else {
+      // User ou GuildMember
+      const uid = mencionar.user?.id || mencionar.id;
+      if (uid) {
+        contentMentions += `<@${uid}> `;
+        allowedMentions.users = [uid];
+      }
+    }
+  }
+
+  // @everyone e @here são controlados pelo parse 'everyone'
+  if (allowEveryone) contentMentions += '@everyone ';
+  if (allowHere) contentMentions += '@here ';
+  if (allowEveryone || allowHere) allowedMentions.parse = ['everyone'];
+
+  // Embed padrão Rancho SP
+  const embed = new EmbedBuilder()
+    .setTitle('📣 Anúncio — Rancho SP')
+    .setDescription(mensagem)
+    .setFooter({ text: 'Rancho SP • Haras Management' })
+    .setTimestamp(new Date());
+
+  // Logo (thumbnail)
+  const logoPath = path.join(__dirname, 'assets', 'ranchosp.png');
+  const files = [];
+  if (fs.existsSync(logoPath)) {
+    embed.setThumbnail('attachment://ranchosp.png');
+    files.push(new AttachmentBuilder(logoPath));
+  }
+
+  // Imagem do anúncio (upload)
+  if (imagem?.url) {
+    embed.setImage(imagem.url);
+  }
+
+  // Envia no canal escolhido
+  let sentMsg = null;
+  try {
+    sentMsg = await targetChannel.send({
+      content: contentMentions.trim() || undefined,
+      embeds: [embed],
+      files,
+      allowedMentions
+    });
+  } catch (e) {
+    console.error('Erro ao enviar anúncio:', e);
+    return interaction.editReply('❌ Não consegui enviar o anúncio. Verifique permissões do bot nesse canal (Enviar mensagens / Incorporar links / Anexar arquivos).');
+  }
+
+  // Fixar se solicitado
+  if (fixar && sentMsg) {
+    try {
+      await sentMsg.pin();
+    } catch (e) {
+      // Não falha o comando por isso
+      console.error('Erro ao fixar anúncio:', e);
+      return interaction.editReply('✅ Anúncio enviado, mas não consegui fixar (falta permissão de Gerenciar Mensagens).');
+    }
+  }
+
+  return interaction.editReply(`✅ Anúncio enviado em ${targetChannel.toString()}${fixar ? ' e fixado.' : '.'}`);
+}
+
 
       if (cmd === 'minha_pasta') {
         await interaction.deferReply({ ephemeral: true });

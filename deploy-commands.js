@@ -1,8 +1,19 @@
 const { REST, Routes, SlashCommandBuilder } = require('discord.js');
-const cfg = require('./config.json');
+const path = require('path');
+const fs = require('fs');
 
-if (!cfg.token || !cfg.clientId) {
-  console.error('❌ Falta token e/ou clientId no config.json');
+// ✅ Carrega config.local.json se existir; senão usa config.json
+const cfgPath = fs.existsSync(path.join(__dirname, 'config.local.json'))
+  ? './config.local.json'
+  : './config.json';
+
+const cfg = require(cfgPath);
+
+// ✅ Token pode vir do ambiente (Square) OU do config local
+const TOKEN = process.env.TOKEN || cfg.token;
+
+if (!TOKEN || !cfg.clientId) {
+  console.error('❌ Falta TOKEN (variável de ambiente) e/ou token no config.local.json, e/ou clientId no config.');
   process.exit(1);
 }
 
@@ -126,7 +137,6 @@ const commands = [
         .setRequired(true)
     ),
 
-  // NOVOS (STAFF)
   new SlashCommandBuilder()
     .setName('listar_registros')
     .setDescription('[STAFF] Lista registros (filtro por usuário/status)')
@@ -176,21 +186,59 @@ const commands = [
         .setDescription('Se quiser apagar a pasta de alguém específico (opcional)')
         .setRequired(false)
     ),
+
+  // ANÚNCIO (STAFF)
+  new SlashCommandBuilder()
+    .setName('anunciar')
+    .setDescription('[STAFF] Envia um anúncio oficial no canal escolhido')
+    .addChannelOption(opt =>
+      opt.setName('canal')
+        .setDescription('Canal onde o anúncio será enviado')
+        .setRequired(true)
+    )
+    .addStringOption(opt =>
+      opt.setName('mensagem')
+        .setDescription('Conteúdo do anúncio')
+        .setRequired(true)
+    )
+    .addAttachmentOption(opt =>
+      opt.setName('imagem')
+        .setDescription('Imagem opcional para o anúncio (upload)')
+        .setRequired(false)
+    )
+    .addBooleanOption(opt =>
+      opt.setName('fixar')
+        .setDescription('Fixar a mensagem após enviar?')
+        .setRequired(false)
+    )
+    .addMentionableOption(opt =>
+      opt.setName('mencionar')
+        .setDescription('Mencionar um cargo ou usuário (opcional)')
+        .setRequired(false)
+    )
+    .addBooleanOption(opt =>
+      opt.setName('everyone')
+        .setDescription('Permitir @everyone (opcional)')
+        .setRequired(false)
+    )
+    .addBooleanOption(opt =>
+      opt.setName('here')
+        .setDescription('Permitir @here (opcional)')
+        .setRequired(false)
+    ),
 ].map(c => c.toJSON());
 
-const rest = new REST({ version: '10' }).setToken(cfg.token);
+const rest = new REST({ version: '10' }).setToken(TOKEN);
 
 async function main() {
   try {
     if (cfg.guildId && String(cfg.guildId).trim()) {
-      // Comandos por servidor (recomendado para testes)
       await rest.put(
         Routes.applicationGuildCommands(cfg.clientId, cfg.guildId),
         { body: commands }
       );
       console.log('✅ Slash commands (GUILD) atualizados com sucesso.');
     } else {
-      // Comandos globais (demoram mais para propagar)
       await rest.put(
         Routes.applicationCommands(cfg.clientId),
         { body: commands }
