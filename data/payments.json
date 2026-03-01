@@ -1,0 +1,24 @@
+[
+  {
+    "guildId": "1477302414062256240",
+    "paymentId": "pay_1772295882968_9056",
+    "userId": "1095030991170568254",
+    "userTag": "andysantie",
+    "paidValue": 12.26,
+    "calculatedValue": 12.26,
+    "paidAt": "2026-02-28T16:24:42.969Z",
+    "paidBy": "andysantie"
+  },
+  {
+    "guildId": "1477302414062256240",
+    "paymentId": "pay_1772296828778_3613",
+    "userId": "1095030991170568254",
+    "userTag": "andysantie",
+    "paidValue": 1,
+    "calculatedValue": 1,
+    "periodStart": "2026-02-28",
+    "periodEnd": "2026-02-28",
+    "paidAt": "2026-02-28T16:40:28.778Z",
+    "paidBy": "andysantie"
+  }
+]

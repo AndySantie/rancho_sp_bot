@@ -1,0 +1,73 @@
+{
+  "token": "seu token aqui",
+  "clientId": "1477305670494851314",
+  "guildId": "1477302414062256240",
+  "roles": {
+    "ownerRoleId": "1477303357696643243",
+    "managerRoleId": "1477303573678391316"
+  },
+  "channels": {
+    "farmHubChannelId": "1477305326507266150",
+    "logChannelId": "1477305272857792542",
+    "logPaymentsChannelId": "1477338749934506087",
+    "rankingChannelId": "1477352414469165228"
+  },
+  "items": [
+    {
+      "key": "espinafre",
+      "label": "Espinafre",
+      "price": 0.1
+    },
+    {
+      "key": "hortela",
+      "label": "Hortelã",
+      "price": 0.11
+    },
+    {
+      "key": "alcool_industrial",
+      "label": "Álcool Industrial",
+      "price": 0.12
+    },
+    {
+      "key": "seringa_vidro",
+      "label": "Seringa de Vidro",
+      "price": 0.13
+    },
+    {
+      "key": "ripa_madeira",
+      "label": "Ripa de Madeira",
+      "price": 0.14
+    },
+    {
+      "key": "fibra",
+      "label": "Fibra",
+      "price": 0.15
+    },
+    {
+      "key": "cola",
+      "label": "Cola",
+      "price": 0.16
+    },
+    {
+      "key": "ginseng_alasca",
+      "label": "Ginseng do Alasca",
+      "price": 0.17
+    },
+    {
+      "key": "millefaliun",
+      "label": "Millefaliun",
+      "price": 0.18
+    }
+  ],
+  "proof": {
+    "maxMinutesSinceProof": 5
+  },
+  "threads": {
+    "namePrefix": "farm-",
+    "autoArchiveMinutes": 10080
+  },
+  "ranking": {
+    "updateMinutes": 10,
+    "topLimit": 10
+  }
+}

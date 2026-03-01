@@ -1,0 +1,60 @@
+[
+  {
+    "guildId": "1477302414062256240",
+    "userId": "1095030991170568254",
+    "userTag": "andysantie",
+    "itemKey": "espinafre",
+    "qty": 50,
+    "proofUrl": "https://discord.com/channels/1477302414062256240/1477319513476169728/1477320162322415667",
+    "createdAt": "2026-02-28T15:03:16.893Z",
+    "day": "2026-02-28"
+  },
+  {
+    "id": 1,
+    "guildId": "1477302414062256240",
+    "userId": "1095030991170568254",
+    "userTag": "andysantie",
+    "itemKey": "alcool_industrial",
+    "qty": 100,
+    "proofUrl": "https://discord.com/channels/1477302414062256240/1477319513476169728/1477329027902607380",
+    "proofMessageId": "1477329027902607380",
+    "createdAt": "2026-02-28T15:42:39.024Z",
+    "day": "2026-02-28",
+    "status": "PAGO",
+    "paymentId": "pay_1772295882968_9056",
+    "paidAt": "2026-02-28T16:24:42.968Z",
+    "paidBy": "andysantie"
+  },
+  {
+    "id": 2,
+    "guildId": "1477302414062256240",
+    "userId": "1095030991170568254",
+    "userTag": "andysantie",
+    "itemKey": "seringa_vidro",
+    "qty": 2,
+    "proofUrl": "https://discord.com/channels/1477302414062256240/1477319513476169728/1477330682564055151",
+    "proofMessageId": "1477330682564055151",
+    "createdAt": "2026-02-28T15:45:05.084Z",
+    "day": "2026-02-28",
+    "status": "PAGO",
+    "paymentId": "pay_1772295882968_9056",
+    "paidAt": "2026-02-28T16:24:42.969Z",
+    "paidBy": "andysantie"
+  },
+  {
+    "id": 3,
+    "guildId": "1477302414062256240",
+    "userId": "1095030991170568254",
+    "userTag": "andysantie",
+    "itemKey": "espinafre",
+    "qty": 10,
+    "proofUrl": "https://discord.com/channels/1477302414062256240/1477319513476169728/1477344306636521480",
+    "proofMessageId": "1477344306636521480",
+    "createdAt": "2026-02-28T16:39:11.003Z",
+    "day": "2026-02-28",
+    "status": "PAGO",
+    "paymentId": "pay_1772296828778_3613",
+    "paidAt": "2026-02-28T16:40:28.778Z",
+    "paidBy": "andysantie"
+  }
+]
