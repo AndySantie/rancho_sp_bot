@@ -489,6 +489,7 @@ async function ensureCommandsPanel() {
   const channelId = cfg.channels?.commandsChannelId;
   if (!channelId) return;
 
+  // Atualizado com “quebra de linha” + novos comandos staff
   const text =
     '📌 **COMANDOS DO BOT — FARM**\n\n' +
     '✅ **Funcionários**\n' +
@@ -584,6 +585,7 @@ let rankingInterval = null;
 
 function startRankingScheduler() {
   const mins = Number(cfg.ranking?.updateMinutes || 10);
+  // atualiza agora
   upsertRankingPanel().catch(() => null);
 
   if (rankingInterval) clearInterval(rankingInterval);
@@ -598,6 +600,7 @@ function startRankingScheduler() {
 // BOAS-VINDAS (EMBED VINTAGE + LOGO)
 // =====================
 async function sendWelcome(member) {
+  // 1) tenta ID no config; 2) tenta por nome "boas-vindas"
   let ch = null;
 
   const byId = cfg.channels?.welcomeChannelId;
@@ -723,106 +726,308 @@ client.on(Events.InteractionCreate, async (interaction) => {
     if (interaction.isChatInputCommand()) {
       const cmd = interaction.commandName;
 
-      if (cmd === 'anunciar') {
-        if (!isStaff(interaction.member)) {
-          return interaction.reply({ content: '❌ Apenas Gerência/Proprietário.', ephemeral: true });
-        }
+if (cmd === 'anunciar') {
 
-        await interaction.deferReply({ ephemeral: true });
 
-        const canal = interaction.options.getChannel('canal', true);
-        const mensagem = interaction.options.getString('mensagem', true);
-        const titulo = interaction.options.getString('titulo', false);
-        const imagem = interaction.options.getAttachment('imagem', false);
-        const fixar = interaction.options.getBoolean('fixar', false) ?? false;
-        const canalReferencia = interaction.options.getChannel('canal_referencia', false);
+  // Apenas Gerência/Proprietário
 
-        const mencionar = interaction.options.getMentionable('mencionar', false);
-        const allowEveryone = interaction.options.getBoolean('everyone', false) ?? false;
-        const allowHere = interaction.options.getBoolean('here', false) ?? false;
 
-        if (!canal || !canal.isTextBased?.() || canal.type === ChannelType.DM) {
-          return interaction.editReply('❌ Selecione um canal de texto válido.');
-        }
+  if (!isStaff(interaction.member)) {
 
-        const targetChannel = canal;
 
-        let contentMentions = '';
-        const allowedMentions = { parse: [], roles: [], users: [] };
+    return interaction.reply({ content: '❌ Apenas Gerência/Proprietário.', ephemeral: true });
 
-        if (mencionar) {
-          if (mencionar.id && mencionar.name !== undefined && mencionar.members !== undefined) {
-            contentMentions += `<@&${mencionar.id}> `;
-            allowedMentions.roles = [mencionar.id];
-          } else {
-            const uid = mencionar.user?.id || mencionar.id;
-            if (uid) {
-              contentMentions += `<@${uid}> `;
-              allowedMentions.users = [uid];
-            }
-          }
-        }
 
-        if (allowEveryone) contentMentions += '@everyone ';
-        if (allowHere) contentMentions += '@here ';
-        if (allowEveryone || allowHere) allowedMentions.parse = ['everyone'];
+  }
 
-        // ✅ TÍTULO: se o usuário preencher, usa o título dele
-        const finalTitle = (titulo && titulo.trim().length)
-          ? `📣 ${titulo.trim()}`
-          : '📣 Anúncio — Rancho SP';
 
-        // ✅ DESCRIÇÃO: mensagem + (se tiver) canal de referência em linha separada
-        const desc =
-          mensagem +
-          (canalReferencia ? `\n\n🔗 **Canal de referência:** ${canalReferencia.toString()}` : '');
 
-        const embed = new EmbedBuilder()
-          .setTitle(finalTitle)
-          .setDescription(desc)
-          .setFooter({ text: 'Rancho SP • Haras Management' })
-          .setTimestamp(new Date());
+  await interaction.deferReply({ ephemeral: true });
 
-        // ✅ Também coloca em FIELD (pra ficar bem visível e organizado)
-        if (canalReferencia) {
-          embed.addFields({ name: '🔗 Canal de referência', value: canalReferencia.toString(), inline: false });
-        }
 
-        const logoPath = path.join(__dirname, 'assets', 'ranchosp.png');
-        const files = [];
-        if (fs.existsSync(logoPath)) {
-          embed.setThumbnail('attachment://ranchosp.png');
-          files.push(new AttachmentBuilder(logoPath));
-        }
 
-        if (imagem?.url) {
-          embed.setImage(imagem.url);
-        }
+  const canal = interaction.options.getChannel('canal', true);
 
-        let sentMsg = null;
-        try {
-          sentMsg = await targetChannel.send({
-            content: contentMentions.trim() || undefined,
-            embeds: [embed],
-            files,
-            allowedMentions
-          });
-        } catch (e) {
-          console.error('Erro ao enviar anúncio:', e);
-          return interaction.editReply('❌ Não consegui enviar o anúncio. Verifique permissões do bot nesse canal (Enviar mensagens / Incorporar links / Anexar arquivos).');
-        }
 
-        if (fixar && sentMsg) {
-          try {
-            await sentMsg.pin();
-          } catch (e) {
-            console.error('Erro ao fixar anúncio:', e);
-            return interaction.editReply('✅ Anúncio enviado, mas não consegui fixar (falta permissão de Gerenciar Mensagens).');
-          }
-        }
+  const mensagem = interaction.options.getString('mensagem', true);
 
-        return interaction.editReply(`✅ Anúncio enviado em ${targetChannel.toString()}${fixar ? ' e fixado.' : '.'}`);
+
+  const titulo = interaction.options.getString('titulo', false);
+
+
+  const canalReferencia = interaction.options.getChannel('canal_referencia', false);
+
+
+  const imagem = interaction.options.getAttachment('imagem', false);
+
+
+  const fixar = interaction.options.getBoolean('fixar', false) ?? false;
+
+
+
+  const mencionar = interaction.options.getMentionable('mencionar', false);
+
+
+  const allowEveryone = interaction.options.getBoolean('everyone', false) ?? false;
+
+
+  const allowHere = interaction.options.getBoolean('here', false) ?? false;
+
+
+
+  // Canal precisa ser de texto (GuildText ou Announcement). Thread também é text-based, mas aqui preferimos canal normal.
+
+
+  if (!canal || !canal.isTextBased?.() || canal.type === ChannelType.DM) {
+
+
+    return interaction.editReply('❌ Selecione um canal de texto válido.');
+
+
+  }
+
+
+
+  const targetChannel = canal;
+
+
+
+  // Monta menções com segurança (allowedMentions)
+
+
+  let contentMentions = '';
+
+
+  const allowedMentions = { parse: [], roles: [], users: [] };
+
+
+
+  if (mencionar) {
+
+
+    // mentionable pode ser Role, User ou GuildMember
+
+
+    if (mencionar.id && mencionar.name !== undefined && mencionar.members !== undefined) {
+
+
+      // Role
+
+
+      contentMentions += `<@&${mencionar.id}> `;
+
+
+      allowedMentions.roles = [mencionar.id];
+
+
+    } else {
+
+
+      // User ou GuildMember
+
+
+      const uid = mencionar.user?.id || mencionar.id;
+
+
+      if (uid) {
+
+
+        contentMentions += `<@${uid}> `;
+
+
+        allowedMentions.users = [uid];
+
+
       }
+
+
+    }
+
+
+  }
+
+
+
+  // @everyone e @here são controlados pelo parse 'everyone'
+
+
+  if (allowEveryone) contentMentions += '@everyone ';
+
+
+  if (allowHere) contentMentions += '@here ';
+
+
+  if (allowEveryone || allowHere) allowedMentions.parse = ['everyone'];
+
+
+
+  // ✅ Título custom (opcional)
+
+
+  const finalTitle = (titulo && titulo.trim().length)
+
+
+    ? `📣 ${titulo.trim()}`
+
+
+    : '📣 Anúncio — Rancho SP';
+
+
+
+  // Embed padrão Rancho SP
+
+
+  const embed = new EmbedBuilder()
+
+
+    .setTitle(finalTitle)
+
+
+    .setDescription(mensagem)
+
+
+    .setFooter({ text: 'Rancho SP • Haras Management' })
+
+
+    .setTimestamp(new Date());
+
+
+
+  // ✅ Canal de referência (opcional) — aparece só uma vez
+
+
+  if (canalReferencia) {
+
+
+    embed.addFields({
+
+
+      name: '🔗 Maiores informações acesse:',
+
+
+      value: canalReferencia.toString(),
+
+
+      inline: false
+
+
+    });
+
+
+  }
+
+
+
+  // Logo (thumbnail)
+
+
+  const logoPath = path.join(__dirname, 'assets', 'ranchosp.png');
+
+
+  const files = [];
+
+
+  if (fs.existsSync(logoPath)) {
+
+
+    embed.setThumbnail('attachment://ranchosp.png');
+
+
+    files.push(new AttachmentBuilder(logoPath));
+
+
+  }
+
+
+
+  // Imagem do anúncio (upload)
+
+
+  if (imagem?.url) {
+
+
+    embed.setImage(imagem.url);
+
+
+  }
+
+
+
+  // Envia no canal escolhido
+
+
+  let sentMsg = null;
+
+
+  try {
+
+
+    sentMsg = await targetChannel.send({
+
+
+      content: contentMentions.trim() || undefined,
+
+
+      embeds: [embed],
+
+
+      files,
+
+
+      allowedMentions
+
+
+    });
+
+
+  } catch (e) {
+
+
+    console.error('Erro ao enviar anúncio:', e);
+
+
+    return interaction.editReply('❌ Não consegui enviar o anúncio. Verifique permissões do bot nesse canal (Enviar mensagens / Incorporar links / Anexar arquivos).');
+
+
+  }
+
+
+
+  // Fixar se solicitado
+
+
+  if (fixar && sentMsg) {
+
+
+    try {
+
+
+      await sentMsg.pin();
+
+
+    } catch (e) {
+
+
+      // Não falha o comando por isso
+
+
+      console.error('Erro ao fixar anúncio:', e);
+
+
+      return interaction.editReply('✅ Anúncio enviado, mas não consegui fixar (falta permissão de Gerenciar Mensagens).');
+
+
+    }
+
+
+  }
+
+
+
+  return interaction.editReply(`✅ Anúncio enviado em ${targetChannel.toString()}${fixar ? ' e fixado.' : '.'}`);
+
+}
+
 
       if (cmd === 'minha_pasta') {
         await interaction.deferReply({ ephemeral: true });
@@ -1136,6 +1341,9 @@ client.on(Events.InteractionCreate, async (interaction) => {
         return interaction.editReply(`✅ Registro **${id}** cancelado.`);
       }
 
+      // =====================
+      // NOVO: /listar_registros (STAFF)
+      // =====================
       if (cmd === 'listar_registros') {
         if (!isStaff(interaction.member)) {
           return interaction.reply({ content: '❌ Apenas Gerência/Proprietário.', ephemeral: true });
@@ -1151,6 +1359,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
         if (user) deposits = deposits.filter(d => d.userId === user.id);
         if (status !== 'TODOS') deposits = deposits.filter(d => d.status === status);
 
+        // mais recentes primeiro
         deposits.sort((a, b) => {
           const ta = new Date(a.createdAt || a.day || 0).getTime();
           const tb = new Date(b.createdAt || b.day || 0).getTime();
@@ -1175,9 +1384,11 @@ client.on(Events.InteractionCreate, async (interaction) => {
           `${user ? `👤 Usuário: **${user.tag}**\n` : ''}` +
           `${status !== 'TODOS' ? `🏷️ Status: **${status}**\n` : ''}`;
 
+        // Discord tem limite de caracteres; quebra em blocos se precisar
         const out = `${header}\n${lines.join('\n')}`;
         if (out.length <= 1900) return interaction.editReply(out);
 
+        // fallback: manda só os IDs se estourar
         const ids = slice.map(d => d.id).join(', ');
         return interaction.editReply(
           `${header}\n` +
@@ -1186,6 +1397,9 @@ client.on(Events.InteractionCreate, async (interaction) => {
         );
       }
 
+      // =====================
+      // NOVO: /cancelar_lote (STAFF)
+      // =====================
       if (cmd === 'cancelar_lote') {
         if (!isStaff(interaction.member)) {
           return interaction.reply({ content: '❌ Apenas Gerência/Proprietário.', ephemeral: true });
@@ -1242,6 +1456,11 @@ client.on(Events.InteractionCreate, async (interaction) => {
         return interaction.editReply(parts.join('\n'));
       }
 
+      // =====================
+      // NOVO: /apagar_pasta (STAFF)
+      // - se usado dentro de uma thread privada: apaga a própria thread
+      // - se informar /apagar_pasta usuario: tenta localizar thread por nome e apaga
+      // =====================
       if (cmd === 'apagar_pasta') {
         if (!isStaff(interaction.member)) {
           return interaction.reply({ content: '❌ Apenas Gerência/Proprietário.', ephemeral: true });
@@ -1250,6 +1469,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
         const targetUser = interaction.options.getUser('usuario', false);
 
+        // 1) Se está dentro de thread privada, e NÃO passou usuário: apaga a thread atual
         const ch = interaction.channel;
         if (!targetUser) {
           const isThread = ch && (ch.type === ChannelType.PrivateThread || ch.type === ChannelType.PublicThread);
@@ -1257,10 +1477,12 @@ client.on(Events.InteractionCreate, async (interaction) => {
             return interaction.editReply('⚠️ Use dentro da pasta (thread) OU informe um usuário: **/apagar_pasta usuario:@fulano**');
           }
 
+          // Apaga a thread atual
           await ch.delete(`Apagar pasta (staff) por ${interaction.user.tag}`).catch(() => null);
           return interaction.editReply('✅ Pasta apagada (thread removida).');
         }
 
+        // 2) Com usuário: tenta localizar
         const thread = await findFarmThreadByUser(interaction.guild, targetUser);
         if (!thread) {
           return interaction.editReply(`❌ Não encontrei a pasta de **${targetUser.tag}**.`);
@@ -1271,6 +1493,9 @@ client.on(Events.InteractionCreate, async (interaction) => {
       }
     }
 
+    // =====================
+    // SELECT MENU (item)
+    // =====================
     if (interaction.isStringSelectMenu() && interaction.customId === 'armazenar_select_item') {
       const s = session.get(interaction.user.id);
       if (!s) return interaction.reply({ content: '⚠️ Sessão expirou. Use /armazenar de novo.', ephemeral: true });
@@ -1285,6 +1510,9 @@ client.on(Events.InteractionCreate, async (interaction) => {
       return interaction.showModal(qtyModal(itemKey));
     }
 
+    // =====================
+    // MODAL (qty)
+    // =====================
     if (interaction.isModalSubmit() && interaction.customId.startsWith('armazenar_qty_modal:')) {
       await interaction.deferReply({ ephemeral: true });
 
@@ -1316,6 +1544,9 @@ client.on(Events.InteractionCreate, async (interaction) => {
       });
     }
 
+    // =====================
+    // BUTTONS (confirm/cancel)
+    // =====================
     if (interaction.isButton()) {
       if (interaction.customId === 'armazenar_cancelar') {
         session.delete(interaction.user.id);
