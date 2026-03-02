@@ -26,6 +26,18 @@ const cfgPath = fs.existsSync(path.join(__dirname, 'config.local.json'))
 
 const cfg = require(cfgPath);
 
+
+// =====================
+// DEBUG / SAFETY LOGS
+// =====================
+process.on('unhandledRejection', (reason) => {
+  console.error('❌ unhandledRejection:', reason);
+});
+
+process.on('uncaughtException', (err) => {
+  console.error('❌ uncaughtException:', err);
+});
+
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
@@ -46,6 +58,7 @@ const depositsFile = path.join(dataDir, 'deposits.json');
 const paymentsFile = path.join(dataDir, 'payments.json');
 const pricesFile = path.join(dataDir, 'prices.json');
 const panelsFile = path.join(dataDir, 'panels.json');
+const suppliersFile = path.join(dataDir, 'suppliers.json');
 
 function ensureFile(file, defaultValue) {
   if (!fs.existsSync(file)) {
@@ -67,6 +80,7 @@ ensureFile(depositsFile, []);
 ensureFile(paymentsFile, []);
 ensureFile(pricesFile, {});
 ensureFile(panelsFile, {});
+ensureFile(suppliersFile, []);
 
 // =====================
 // HELPERS
@@ -378,6 +392,182 @@ function savePanels(p) {
   writeJson(panelsFile, p || {});
 }
 
+function loadSuppliers() { return readJson(suppliersFile, []); }
+function saveSuppliers(d) { writeJson(suppliersFile, d); }
+
+const SUPPLIERS_PANEL_CHANNEL_ID = '1478053034469884039'; // id do cadastro fornecedores
+const SUPPLIERS_POST_CHANNEL_ID = '1477657870655815864';  // id contatos parcerias
+
+function suppliersButtonRow() {
+  return new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId('supplier_open_modal')
+      .setLabel('Cadastrar fornecedor')
+      .setStyle(ButtonStyle.Primary)
+  );
+}
+
+function supplierModalCreate(prefill = {}, customId = 'supplier_create_modal_submit') {
+  const modal = new ModalBuilder()
+    .setCustomId(customId)
+    .setTitle('Cadastrar Fornecedor');
+
+  const nome = new TextInputBuilder()
+    .setCustomId('nome')
+    .setLabel('Nome do fornecedor')
+    .setStyle(TextInputStyle.Short)
+    .setRequired(true)
+    .setPlaceholder('Ex: Hermelino Miller');
+
+  const pombo = new TextInputBuilder()
+    .setCustomId('pombo')
+    .setLabel('Pombo (número / ID)')
+    .setStyle(TextInputStyle.Short)
+    .setRequired(true)
+    .setPlaceholder('Ex: 204');
+
+  const localidade = new TextInputBuilder()
+    .setCustomId('localidade')
+    .setLabel('Localidade')
+    .setStyle(TextInputStyle.Short)
+    .setRequired(true)
+    .setPlaceholder('Ex: Artesanato Saint Dennis');
+
+  const obs = new TextInputBuilder()
+    .setCustomId('obs')
+    .setLabel('Observação (opcional)')
+    .setStyle(TextInputStyle.Short)
+    .setRequired(false)
+    .setPlaceholder('Ex: atende só de manhã');
+
+  const produtos = new TextInputBuilder()
+    .setCustomId('produtos')
+    .setLabel('Produtos (1 por linha: Produto | Valor)')
+    .setStyle(TextInputStyle.Paragraph)
+    .setRequired(true)
+    .setPlaceholder('Ex:\nVerniz | 0,35\nFerradura | 1,20');
+
+  // Prefill (para edição)
+  if (prefill.nome) nome.setValue(String(prefill.nome).slice(0, 4000));
+  if (prefill.pombo) pombo.setValue(String(prefill.pombo).slice(0, 4000));
+  if (prefill.localidade) localidade.setValue(String(prefill.localidade).slice(0, 4000));
+  if (prefill.obs) obs.setValue(String(prefill.obs).slice(0, 4000));
+  if (prefill.produtosText) produtos.setValue(String(prefill.produtosText).slice(0, 4000));
+
+  modal.addComponents(
+    new ActionRowBuilder().addComponents(nome),
+    new ActionRowBuilder().addComponents(pombo),
+    new ActionRowBuilder().addComponents(localidade),
+    new ActionRowBuilder().addComponents(obs),
+    new ActionRowBuilder().addComponents(produtos)
+  );
+
+  return modal;
+}
+
+function parseProducts(text) {
+  const lines = String(text || '')
+    .split(/\r?\n/)
+    .map(l => l.trim())
+    .filter(Boolean);
+
+  const out = [];
+  for (const line of lines.slice(0, 10)) {
+    let parts = line.split('|');
+    if (parts.length < 2) parts = line.split('-');
+    if (parts.length < 2) {
+      out.push({ produto: line, valor: '' });
+      continue;
+    }
+    const produto = parts[0].trim();
+    const valor = parts.slice(1).join('|').trim();
+    out.push({ produto, valor });
+  }
+  return out;
+}
+
+function buildSupplierEmbed(data) {
+  const nome = data.nome?.trim() || '—';
+  const pombo = data.pombo?.trim() || '—';
+  const localidade = data.localidade?.trim() || '—';
+  const obs = (data.obs || '').trim();
+  const produtos = Array.isArray(data.produtos) ? data.produtos : [];
+
+  const maxProdLen = Math.min(
+    28,
+    Math.max(10, ...produtos.map(p => (p.produto || '').length))
+  );
+
+  const prodLines = produtos.length
+    ? produtos.map(p => {
+        const prod = String(p.produto || '').slice(0, 40);
+        const val = String(p.valor || '').slice(0, 20);
+        const pad = prod.padEnd(maxProdLen, ' ');
+        return `${pad}  ${val ? `$${val}` : ''}`.trimEnd();
+      }).join('\n')
+    : '—';
+
+  const embed = new EmbedBuilder()
+    .setTitle('FORNECEDOR')
+    .addFields(
+      { name: 'Nome', value: nome, inline: true },
+      { name: 'Pombo', value: pombo, inline: true },
+      { name: 'Localidade', value: localidade, inline: false },
+      { name: 'Produtos', value: '```\n' + prodLines + '\n```', inline: false }
+    )
+    .setFooter({ text: 'Rancho SP • Haras Management' })
+    .setTimestamp(new Date());
+
+  if (obs) embed.addFields({ name: 'Observação', value: obs, inline: false });
+
+  const logoPath = path.join(__dirname, 'assets', 'ranchosp.png');
+  if (fs.existsSync(logoPath)) embed.setThumbnail('attachment://ranchosp.png');
+
+  return embed;
+}
+
+function supplierConfirmRow() {
+  return new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId('supplier_confirm_post')
+      .setLabel('Confirmar e postar')
+      .setStyle(ButtonStyle.Success),
+    new ButtonBuilder()
+      .setCustomId('supplier_cancel')
+      .setLabel('Cancelar')
+      .setStyle(ButtonStyle.Danger)
+  );
+}
+
+function supplierManageRow(supplierId) {
+  return new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId(`supplier_edit:${supplierId}`)
+      .setLabel('Editar')
+      .setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder()
+      .setCustomId(`supplier_delete:${supplierId}`)
+      .setLabel('Excluir')
+      .setStyle(ButtonStyle.Danger)
+  );
+}
+
+async function ensureSuppliersPanel() {
+  const text =
+    '📌 **CADASTRO DE FORNECEDORES**\n' +
+    'Somente **Gerência/Proprietário** podem cadastrar.\n\n' +
+    'Clique no botão abaixo para cadastrar um fornecedor.\n' +
+    'O bot vai mostrar uma **prévia** e pedir confirmação antes de postar.';
+
+  await upsertPanelMessage({
+    key: 'suppliers_panel',
+    channelId: SUPPLIERS_PANEL_CHANNEL_ID,
+    content: text,
+    components: [suppliersButtonRow()]
+  });
+}
+
+
 async function upsertPanelMessage({ key, channelId, content, components }) {
   if (!channelId) return;
 
@@ -650,6 +840,7 @@ client.once(Events.ClientReady, async () => {
   await ensureRegisterPanel();
   await ensureFarmGuidePanel();
   await ensureCommandsPanel();
+  await ensureSuppliersPanel();
   startRankingScheduler();
 });
 
@@ -668,17 +859,79 @@ client.on(Events.GuildMemberAdd, async (member) => {
 // MAIN
 // =====================
 const session = new Map();
+const supplierDraft = new Map();
 
 client.on(Events.InteractionCreate, async (interaction) => {
+// DEBUG InteractionCreate
+try {
+  if (interaction.isChatInputCommand && interaction.isChatInputCommand()) {
+    console.log(`➡️ Interaction: /${interaction.commandName} by ${interaction.user?.tag || interaction.user?.id}`);
+  } else if (interaction.isButton && interaction.isButton()) {
+    console.log(`➡️ Interaction: button ${interaction.customId} by ${interaction.user?.tag || interaction.user?.id}`);
+  } else if (interaction.isModalSubmit && interaction.isModalSubmit()) {
+    console.log(`➡️ Interaction: modal ${interaction.customId} by ${interaction.user?.tag || interaction.user?.id}`);
+  }
+} catch (e) {
+  console.error('DEBUG InteractionCreate log failed:', e);
+}
+
   try {
     // =====================
     // REGISTRO (botão + modal)
     // =====================
-    if (interaction.isButton() && interaction.customId === 'register_open_modal') {
+    
+if (interaction.isButton() && interaction.customId === 'supplier_open_modal') {
+  if (!isStaff(interaction.member)) {
+    return interaction.reply({ content: '❌ Apenas Gerência/Proprietário.', ephemeral: true });
+  }
+  return interaction.showModal(supplierModalCreate());
+}
+
+if (interaction.isButton() && interaction.customId === 'register_open_modal') {
       return interaction.showModal(registerModal());
     }
 
-    if (interaction.isModalSubmit() && interaction.customId === 'register_modal_submit') {
+    
+if (interaction.isModalSubmit() && interaction.customId === 'supplier_create_modal_submit') {
+  if (!isStaff(interaction.member)) {
+    return interaction.reply({ content: '❌ Apenas Gerência/Proprietário.', ephemeral: true });
+  }
+
+  await interaction.deferReply({ ephemeral: true });
+
+  const nome = interaction.fields.getTextInputValue('nome')?.trim();
+  const pombo = interaction.fields.getTextInputValue('pombo')?.trim();
+  const localidade = interaction.fields.getTextInputValue('localidade')?.trim();
+  const obs = interaction.fields.getTextInputValue('obs')?.trim();
+  const produtosText = interaction.fields.getTextInputValue('produtos')?.trim();
+
+  if (!nome || !pombo || !localidade || !produtosText) {
+    return interaction.editReply('❌ Preencha todos os campos obrigatórios.');
+  }
+
+  const produtos = parseProducts(produtosText);
+  if (!produtos.length) {
+    return interaction.editReply('❌ Informe pelo menos 1 produto (1 por linha).');
+  }
+
+  const draft = { nome, pombo, localidade, obs: obs || '', produtos, produtosText };
+  supplierDraft.set(interaction.user.id, { mode: 'create', data: draft });
+
+  const embed = buildSupplierEmbed(draft);
+
+  const files = [];
+  const logoPath = path.join(__dirname, 'assets', 'ranchosp.png');
+  if (fs.existsSync(logoPath)) files.push(new AttachmentBuilder(logoPath));
+
+  return interaction.editReply({
+    content: '✅ **Prévia do fornecedor** — confirme para postar:',
+    embeds: [embed],
+    components: [supplierConfirmRow()],
+    files
+  });
+}
+
+if (interaction.isModalSubmit() && interaction.customId === 'register_modal_submit') {
       await interaction.deferReply({ ephemeral: true });
 
       const rp = interaction.fields.getTextInputValue('rp_name').trim();
@@ -722,6 +975,14 @@ client.on(Events.InteractionCreate, async (interaction) => {
     // =====================
     if (interaction.isChatInputCommand()) {
       const cmd = interaction.commandName;
+
+if (cmd === 'cadastrar') {
+  if (!isStaff(interaction.member)) {
+    return interaction.reply({ content: '❌ Apenas Gerência/Proprietário.', ephemeral: true });
+  }
+  return interaction.showModal(supplierModalCreate());
+}
+
 
       if (cmd === 'anunciar') {
         if (!isStaff(interaction.member)) {
@@ -1293,7 +1554,72 @@ client.on(Events.InteractionCreate, async (interaction) => {
       return interaction.showModal(qtyModal(itemKey));
     }
 
-    if (interaction.isModalSubmit() && interaction.customId.startsWith('armazenar_qty_modal:')) {
+    
+if (interaction.isModalSubmit() && interaction.customId === 'supplier_edit_modal_submit') {
+  if (!isStaff(interaction.member)) {
+    return interaction.reply({ content: '❌ Apenas Gerência/Proprietário.', ephemeral: true });
+  }
+
+  await interaction.deferReply({ ephemeral: true });
+
+  const meta = supplierDraft.get(interaction.user.id);
+  const supplierId = Number(meta?.supplierId);
+  if (!supplierId) return interaction.editReply('⚠️ Sessão de edição expirou. Tente novamente.');
+
+  const nome = interaction.fields.getTextInputValue('nome')?.trim();
+  const pombo = interaction.fields.getTextInputValue('pombo')?.trim();
+  const localidade = interaction.fields.getTextInputValue('localidade')?.trim();
+  const obs = interaction.fields.getTextInputValue('obs')?.trim();
+  const produtosText = interaction.fields.getTextInputValue('produtos')?.trim();
+
+  if (!nome || !pombo || !localidade || !produtosText) {
+    return interaction.editReply('❌ Preencha todos os campos obrigatórios.');
+  }
+
+  const produtos = parseProducts(produtosText);
+  if (!produtos.length) {
+    return interaction.editReply('❌ Informe pelo menos 1 produto (1 por linha).');
+  }
+
+  const suppliers = loadSuppliers();
+  const idx = suppliers.findIndex(s => Number(s.id) === supplierId);
+  if (idx === -1) return interaction.editReply('❌ Cadastro não encontrado no JSON.');
+
+  suppliers[idx] = {
+    ...suppliers[idx],
+    nome,
+    pombo,
+    localidade,
+    obs: obs || '',
+    produtos,
+    produtosText,
+    updatedAt: nowIso(),
+    updatedBy: interaction.user.tag
+  };
+  saveSuppliers(suppliers);
+
+  // Atualiza a mensagem do canal (se der)
+  try {
+    const postCh = await interaction.guild.channels.fetch(SUPPLIERS_POST_CHANNEL_ID).catch(() => null);
+    if (postCh && postCh.isTextBased() && meta?.messageId) {
+      const msg = await postCh.messages.fetch(meta.messageId).catch(() => null);
+      if (msg) {
+        const embed = buildSupplierEmbed(suppliers[idx]);
+        const files = [];
+        const logoPath = path.join(__dirname, 'assets', 'ranchosp.png');
+        if (fs.existsSync(logoPath)) files.push(new AttachmentBuilder(logoPath));
+        await msg.edit({ embeds: [embed], components: [supplierManageRow(supplierId)], files });
+      }
+    }
+  } catch (e) {
+    console.error('Erro ao editar mensagem do fornecedor:', e);
+  }
+
+  supplierDraft.delete(interaction.user.id);
+  return interaction.editReply(`✅ Fornecedor (ID: ${supplierId}) atualizado.`);
+}
+
+if (interaction.isModalSubmit() && interaction.customId.startsWith('armazenar_qty_modal:')) {
       await interaction.deferReply({ ephemeral: true });
 
       const itemKey = interaction.customId.split(':')[1];
@@ -1324,7 +1650,115 @@ client.on(Events.InteractionCreate, async (interaction) => {
       });
     }
 
-    if (interaction.isButton()) {
+    
+if (interaction.isButton()) {
+  // =====================
+  // FORNECEDORES
+  // =====================
+  if (interaction.customId === 'supplier_cancel') {
+    supplierDraft.delete(interaction.user.id);
+    return interaction.reply({ content: '❌ Cadastro cancelado.', ephemeral: true });
+  }
+
+  if (interaction.customId === 'supplier_confirm_post') {
+    if (!isStaff(interaction.member)) {
+      return interaction.reply({ content: '❌ Apenas Gerência/Proprietário.', ephemeral: true });
+    }
+
+    const payload = supplierDraft.get(interaction.user.id);
+    if (!payload?.data) {
+      return interaction.reply({ content: '⚠️ Prévia expirou. Use /cadastrar novamente.', ephemeral: true });
+    }
+
+    await interaction.deferReply({ ephemeral: true });
+
+    const suppliers = loadSuppliers();
+    const nextId = (suppliers.reduce((m, s) => Math.max(m, Number(s.id || 0)), 0) || 0) + 1;
+
+    const rec = {
+      id: nextId,
+      createdAt: nowIso(),
+      createdBy: interaction.user.tag,
+      ...payload.data
+    };
+
+    suppliers.push(rec);
+    saveSuppliers(suppliers);
+    supplierDraft.delete(interaction.user.id);
+
+    const postCh = await interaction.guild.channels.fetch(SUPPLIERS_POST_CHANNEL_ID).catch(() => null);
+    if (!postCh || !postCh.isTextBased()) {
+      return interaction.editReply('❌ Não encontrei o canal de postagem (contatos parcerias).');
+    }
+
+    const embed = buildSupplierEmbed(rec);
+
+    const files = [];
+    const logoPath = path.join(__dirname, 'assets', 'ranchosp.png');
+    if (fs.existsSync(logoPath)) files.push(new AttachmentBuilder(logoPath));
+
+    await postCh.send({
+      embeds: [embed],
+      components: [supplierManageRow(rec.id)],
+      files
+    });
+
+    return interaction.editReply(`✅ Postado com sucesso em ${postCh.toString()} (ID: ${rec.id}).`);
+  }
+
+  if (interaction.customId.startsWith('supplier_delete:')) {
+    if (!isStaff(interaction.member)) {
+      return interaction.reply({ content: '❌ Apenas Gerência/Proprietário.', ephemeral: true });
+    }
+
+    await interaction.deferReply({ ephemeral: true });
+
+    const supplierId = Number(interaction.customId.split(':')[1]);
+    if (!supplierId) return interaction.editReply('❌ ID inválido.');
+
+    const suppliers = loadSuppliers();
+    const idx = suppliers.findIndex(s => Number(s.id) === supplierId);
+    if (idx === -1) return interaction.editReply('❌ Cadastro não encontrado no JSON.');
+
+    const removed = suppliers.splice(idx, 1)[0];
+    saveSuppliers(suppliers);
+
+    // apaga a mensagem onde clicou (se possível)
+    if (interaction.message?.deletable) {
+      await interaction.message.delete().catch(() => {});
+    }
+
+    return interaction.editReply(`✅ Fornecedor **${removed.nome}** (ID: ${supplierId}) removido.`);
+  }
+
+  if (interaction.customId.startsWith('supplier_edit:')) {
+    if (!isStaff(interaction.member)) {
+      return interaction.reply({ content: '❌ Apenas Gerência/Proprietário.', ephemeral: true });
+    }
+
+    const supplierId = Number(interaction.customId.split(':')[1]);
+    const suppliers = loadSuppliers();
+    const rec = suppliers.find(x => Number(x.id) === supplierId);
+    if (!rec) return interaction.reply({ content: '❌ Cadastro não encontrado no JSON.', ephemeral: true });
+
+    const produtosText = (rec.produtos || [])
+      .slice(0, 10)
+      .map(p => `${p.produto || ''} | ${p.valor || ''}`.trim())
+      .join('\n');
+
+    supplierDraft.set(interaction.user.id, { mode: 'edit', supplierId, messageId: interaction.message?.id });
+
+    return interaction.showModal(
+      supplierModalCreate(
+        { nome: rec.nome, pombo: rec.pombo, localidade: rec.localidade, obs: rec.obs || '', produtosText },
+        'supplier_edit_modal_submit'
+      )
+    );
+  }
+
+  // =====================
+  // ARMAZENAR (existente)
+  // =====================
       if (interaction.customId === 'armazenar_cancelar') {
         session.delete(interaction.user.id);
         return interaction.reply({ content: '❌ Registro cancelado.', ephemeral: true });
