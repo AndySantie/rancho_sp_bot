@@ -188,6 +188,7 @@ const commands = [
     ),
 
   // ANÚNCIO (STAFF)
+  // ✅ REGRA DISCORD: required options devem vir antes das opcionais
   new SlashCommandBuilder()
     .setName('anunciar')
     .setDescription('[STAFF] Envia um anúncio oficial no canal escolhido')
@@ -200,6 +201,16 @@ const commands = [
       opt.setName('mensagem')
         .setDescription('Conteúdo do anúncio')
         .setRequired(true)
+    )
+    .addStringOption(opt =>
+      opt.setName('titulo')
+        .setDescription('Título do anúncio (opcional)')
+        .setRequired(false)
+    )
+    .addChannelOption(opt =>
+      opt.setName('canal_referencia')
+        .setDescription('Canal para direcionar (ex: tabela de preços) — opcional')
+        .setRequired(false)
     )
     .addAttachmentOption(opt =>
       opt.setName('imagem')
@@ -226,6 +237,7 @@ const commands = [
         .setDescription('Permitir @here (opcional)')
         .setRequired(false)
     ),
+
 ].map(c => c.toJSON());
 
 const rest = new REST({ version: '10' }).setToken(TOKEN);
