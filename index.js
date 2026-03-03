@@ -49,6 +49,13 @@ const client = new Client({
 });
 
 // =====================
+// CLIENT ERROR (evita crash)
+// =====================
+client.on('error', (err) => {
+  console.error('❌ client error:', err);
+});
+
+// =====================
 // FILE STORAGE
 // =====================
 const dataDir = path.join(__dirname, 'data');
@@ -118,6 +125,19 @@ function isStaff(member) {
     (owner && member.roles.cache.has(owner)) ||
     (mgr && member.roles.cache.has(mgr))
   );
+}
+
+// =====================
+// SAFE INTERACTION HELPERS
+// =====================
+async function safeShowModal(interaction, modal) {
+  try {
+    return await interaction.showModal(modal);
+  } catch (e) {
+    // 10062 = Unknown interaction (expirou / já respondida)
+    if (e?.code === 10062) return;
+    throw e;
+  }
 }
 
 // =====================
@@ -884,11 +904,11 @@ if (interaction.isButton() && interaction.customId === 'supplier_open_modal') {
   if (!isStaff(interaction.member)) {
     return interaction.reply({ content: '❌ Apenas Gerência/Proprietário.', ephemeral: true });
   }
-  return interaction.showModal(supplierModalCreate());
+  return safeShowModal(interaction, supplierModalCreate());
 }
 
 if (interaction.isButton() && interaction.customId === 'register_open_modal') {
-      return interaction.showModal(registerModal());
+      return safeShowModal(interaction, registerModal());
     }
 
     
@@ -980,7 +1000,7 @@ if (cmd === 'cadastrar') {
   if (!isStaff(interaction.member)) {
     return interaction.reply({ content: '❌ Apenas Gerência/Proprietário.', ephemeral: true });
   }
-  return interaction.showModal(supplierModalCreate());
+  return safeShowModal(interaction, supplierModalCreate());
 }
 
 
@@ -1552,7 +1572,7 @@ if (cmd === 'cadastrar') {
       s.itemKey = itemKey;
       session.set(interaction.user.id, s);
 
-      return interaction.showModal(qtyModal(itemKey));
+      return safeShowModal(interaction, qtyModal(itemKey));
     }
 
     

@@ -9,6 +9,13 @@ const cfgPath = fs.existsSync(path.join(__dirname, 'config.local.json'))
 
 const cfg = require(cfgPath);
 
+process.on('unhandledRejection', (reason) => {
+  console.error('❌ unhandledRejection:', reason);
+});
+process.on('uncaughtException', (err) => {
+  console.error('❌ uncaughtException:', err);
+});
+
 // ✅ Token pode vir do ambiente (Square) OU do config local
 const TOKEN = process.env.TOKEN || cfg.token;
 
