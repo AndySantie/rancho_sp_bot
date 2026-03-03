@@ -4,7 +4,8 @@
   "guildId": "1477302414062256240",
   "roles": {
     "ownerRoleId": "1477303357696643243",
-    "managerRoleId": "1477303573678391316"
+    "managerRoleId": "1477303573678391316",
+    "employeeRoleId": "1477303771242430544"
   },
   "channels": {
     "farmHubChannelId": "1477305326507266150",

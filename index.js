@@ -53,6 +53,19 @@ const client = new Client({
 // =====================
 client.on('error', (err) => {
   console.error('❌ client error:', err);
+
+// =====================
+// REST/WS ERROR HANDLERS (evita crash por eventos internos)
+// =====================
+if (client.rest?.on) {
+  client.rest.on('error', (err) => {
+    console.error('❌ rest error:', err);
+  });
+}
+client.on('shardError', (err) => {
+  console.error('❌ shardError:', err);
+});
+
 });
 
 // =====================
@@ -135,8 +148,12 @@ async function safeShowModal(interaction, modal) {
     return await interaction.showModal(modal);
   } catch (e) {
     // 10062 = Unknown interaction (expirou / já respondida)
-    if (e?.code === 10062) return;
-    throw e;
+    if (e?.code === 10062) {
+      console.warn('⚠️ showModal expirou (10062). Ignorando.');
+      return;
+    }
+    console.error('❌ Erro ao abrir modal:', e);
+    return; // nunca derruba o bot
   }
 }
 
