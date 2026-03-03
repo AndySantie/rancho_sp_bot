@@ -15,6 +15,9 @@ const {
   EmbedBuilder
 } = require('discord.js');
 
+
+// Discord flags (64 = Ephemeral)
+const EPHEMERAL_FLAG = 1 << 6;
 const { stringify } = require('csv-stringify/sync');
 const path = require('path');
 const fs = require('fs');
@@ -53,19 +56,6 @@ const client = new Client({
 // =====================
 client.on('error', (err) => {
   console.error('❌ client error:', err);
-
-// =====================
-// REST/WS ERROR HANDLERS (evita crash por eventos internos)
-// =====================
-if (client.rest?.on) {
-  client.rest.on('error', (err) => {
-    console.error('❌ rest error:', err);
-  });
-}
-client.on('shardError', (err) => {
-  console.error('❌ shardError:', err);
-});
-
 });
 
 // =====================
@@ -148,12 +138,21 @@ async function safeShowModal(interaction, modal) {
     return await interaction.showModal(modal);
   } catch (e) {
     // 10062 = Unknown interaction (expirou / já respondida)
-    if (e?.code === 10062) {
-      console.warn('⚠️ showModal expirou (10062). Ignorando.');
-      return;
-    }
-    console.error('❌ Erro ao abrir modal:', e);
-    return; // nunca derruba o bot
+    if (e?.code === 10062) return;
+    throw e;
+  }
+}
+
+async function safeDeferReply(interaction) {
+  try {
+    if (interaction.deferred || interaction.replied) return;
+    // 'ephemeral' option is deprecated in newer discord.js; use flags.
+    return await interaction.deferReply({ flags: EPHEMERAL_FLAG });
+  } catch (e) {
+    // 10062 = Unknown interaction (expirou / já respondida)
+    if (e?.code === 10062) return;
+    console.error('❌ Erro ao deferReply:', e);
+    throw e;
   }
 }
 
@@ -934,7 +933,7 @@ if (interaction.isModalSubmit() && interaction.customId === 'supplier_create_mod
     return interaction.reply({ content: '❌ Apenas Gerência/Proprietário.', ephemeral: true });
   }
 
-  await interaction.deferReply({ ephemeral: true });
+  await safeDeferReply(interaction);
 
   const nome = interaction.fields.getTextInputValue('nome')?.trim();
   const pombo = interaction.fields.getTextInputValue('pombo')?.trim();
@@ -969,7 +968,7 @@ if (interaction.isModalSubmit() && interaction.customId === 'supplier_create_mod
 }
 
 if (interaction.isModalSubmit() && interaction.customId === 'register_modal_submit') {
-      await interaction.deferReply({ ephemeral: true });
+      await safeDeferReply(interaction);
 
       const rp = interaction.fields.getTextInputValue('rp_name').trim();
       const bag = interaction.fields.getTextInputValue('bag_id').trim();
@@ -1026,7 +1025,7 @@ if (cmd === 'cadastrar') {
           return interaction.reply({ content: '❌ Apenas Gerência/Proprietário.', ephemeral: true });
         }
 
-        await interaction.deferReply({ ephemeral: true });
+        await safeDeferReply(interaction);
 
         const canal = interaction.options.getChannel('canal', true);
         const mensagem = interaction.options.getString('mensagem', true);
@@ -1132,13 +1131,13 @@ if (cmd === 'cadastrar') {
       }
 
       if (cmd === 'minha_pasta') {
-        await interaction.deferReply({ ephemeral: true });
+        await safeDeferReply(interaction);
         const thread = await getOrCreatePrivateThread(interaction);
         return interaction.editReply(`✅ Sua pasta: ${thread.toString()}`);
       }
 
       if (cmd === 'armazenar') {
-        await interaction.deferReply({ ephemeral: true });
+        await safeDeferReply(interaction);
 
         const thread = await getOrCreatePrivateThread(interaction);
 
@@ -1170,7 +1169,7 @@ if (cmd === 'cadastrar') {
       }
 
       if (cmd === 'meu_total') {
-        await interaction.deferReply({ ephemeral: true });
+        await safeDeferReply(interaction);
 
         const totals = totalsByUser(interaction.guildId, interaction.user.id, { onlyOpen: false });
         const keys = Object.keys(totals);
@@ -1189,7 +1188,7 @@ if (cmd === 'cadastrar') {
         if (!isStaff(interaction.member)) {
           return interaction.reply({ content: '❌ Apenas Gerência/Proprietário.', ephemeral: true });
         }
-        await interaction.deferReply({ ephemeral: true });
+        await safeDeferReply(interaction);
 
         const user = interaction.options.getUser('usuario', true);
         const totals = totalsByUser(interaction.guildId, user.id, { onlyOpen: false });
@@ -1208,7 +1207,7 @@ if (cmd === 'cadastrar') {
         if (!isStaff(interaction.member)) {
           return interaction.reply({ content: '❌ Apenas Gerência/Proprietário.', ephemeral: true });
         }
-        await interaction.deferReply({ ephemeral: true });
+        await safeDeferReply(interaction);
 
         const day = interaction.options.getString('data') || ymd();
         const map = totalsDay(interaction.guildId, day);
@@ -1232,7 +1231,7 @@ if (cmd === 'cadastrar') {
         if (!isStaff(interaction.member)) {
           return interaction.reply({ content: '❌ Apenas Gerência/Proprietário.', ephemeral: true });
         }
-        await interaction.deferReply({ ephemeral: true });
+        await safeDeferReply(interaction);
 
         const inicio = interaction.options.getString('inicio', true);
         const fim = interaction.options.getString('fim', true);
@@ -1269,7 +1268,7 @@ if (cmd === 'cadastrar') {
         if (!isStaff(interaction.member)) {
           return interaction.reply({ content: '❌ Apenas Gerência/Proprietário.', ephemeral: true });
         }
-        await interaction.deferReply({ ephemeral: true });
+        await safeDeferReply(interaction);
 
         const map = getPriceMap();
         const lines = Object.keys(map).sort().map(k => {
@@ -1284,7 +1283,7 @@ if (cmd === 'cadastrar') {
         if (!isStaff(interaction.member)) {
           return interaction.reply({ content: '❌ Apenas Gerência/Proprietário.', ephemeral: true });
         }
-        await interaction.deferReply({ ephemeral: true });
+        await safeDeferReply(interaction);
 
         const itemKey = interaction.options.getString('item', true);
         const value = interaction.options.getNumber('valor', true);
@@ -1299,7 +1298,7 @@ if (cmd === 'cadastrar') {
         if (!isStaff(interaction.member)) {
           return interaction.reply({ content: '❌ Apenas Gerência/Proprietário.', ephemeral: true });
         }
-        await interaction.deferReply({ ephemeral: true });
+        await safeDeferReply(interaction);
 
         const user = interaction.options.getUser('usuario', true);
         const calc = computePayment(interaction.guildId, user.id);
@@ -1323,7 +1322,7 @@ if (cmd === 'cadastrar') {
         if (!isStaff(interaction.member)) {
           return interaction.reply({ content: '❌ Apenas Gerência/Proprietário.', ephemeral: true });
         }
-        await interaction.deferReply({ ephemeral: true });
+        await safeDeferReply(interaction);
 
         const user = interaction.options.getUser('usuario', true);
         const overrideValue = interaction.options.getNumber('valor', false);
@@ -1393,7 +1392,7 @@ if (cmd === 'cadastrar') {
         if (!isStaff(interaction.member)) {
           return interaction.reply({ content: '❌ Apenas Gerência/Proprietário.', ephemeral: true });
         }
-        await interaction.deferReply({ ephemeral: true });
+        await safeDeferReply(interaction);
 
         const periodo = interaction.options.getString('periodo', true);
         const itemKey = interaction.options.getString('item', false);
@@ -1411,7 +1410,7 @@ if (cmd === 'cadastrar') {
         if (!isStaff(interaction.member)) {
           return interaction.reply({ content: '❌ Apenas Gerência/Proprietário.', ephemeral: true });
         }
-        await interaction.deferReply({ ephemeral: true });
+        await safeDeferReply(interaction);
 
         const id = interaction.options.getInteger('id', true);
         const motivo = interaction.options.getString('motivo', true);
@@ -1447,7 +1446,7 @@ if (cmd === 'cadastrar') {
         if (!isStaff(interaction.member)) {
           return interaction.reply({ content: '❌ Apenas Gerência/Proprietário.', ephemeral: true });
         }
-        await interaction.deferReply({ ephemeral: true });
+        await safeDeferReply(interaction);
 
         const user = interaction.options.getUser('usuario', false);
         const status = interaction.options.getString('status', false) || 'TODOS';
@@ -1497,7 +1496,7 @@ if (cmd === 'cadastrar') {
         if (!isStaff(interaction.member)) {
           return interaction.reply({ content: '❌ Apenas Gerência/Proprietário.', ephemeral: true });
         }
-        await interaction.deferReply({ ephemeral: true });
+        await safeDeferReply(interaction);
 
         const idsRaw = interaction.options.getString('ids', true);
         const motivo = interaction.options.getString('motivo', true);
@@ -1553,7 +1552,7 @@ if (cmd === 'cadastrar') {
         if (!isStaff(interaction.member)) {
           return interaction.reply({ content: '❌ Apenas Gerência/Proprietário.', ephemeral: true });
         }
-        await interaction.deferReply({ ephemeral: true });
+        await safeDeferReply(interaction);
 
         const targetUser = interaction.options.getUser('usuario', false);
 
@@ -1598,7 +1597,7 @@ if (interaction.isModalSubmit() && interaction.customId === 'supplier_edit_modal
     return interaction.reply({ content: '❌ Apenas Gerência/Proprietário.', ephemeral: true });
   }
 
-  await interaction.deferReply({ ephemeral: true });
+  await safeDeferReply(interaction);
 
   const meta = supplierDraft.get(interaction.user.id);
   const supplierId = Number(meta?.supplierId);
@@ -1658,7 +1657,7 @@ if (interaction.isModalSubmit() && interaction.customId === 'supplier_edit_modal
 }
 
 if (interaction.isModalSubmit() && interaction.customId.startsWith('armazenar_qty_modal:')) {
-      await interaction.deferReply({ ephemeral: true });
+      await safeDeferReply(interaction);
 
       const itemKey = interaction.customId.split(':')[1];
       const qtyRaw = interaction.fields.getTextInputValue('qty').trim();
@@ -1708,7 +1707,7 @@ if (interaction.isButton()) {
       return interaction.reply({ content: '⚠️ Prévia expirou. Use /cadastrar novamente.', ephemeral: true });
     }
 
-    await interaction.deferReply({ ephemeral: true });
+    await safeDeferReply(interaction);
 
     const suppliers = loadSuppliers();
     const nextId = (suppliers.reduce((m, s) => Math.max(m, Number(s.id || 0)), 0) || 0) + 1;
@@ -1749,7 +1748,7 @@ if (interaction.isButton()) {
       return interaction.reply({ content: '❌ Apenas Gerência/Proprietário.', ephemeral: true });
     }
 
-    await interaction.deferReply({ ephemeral: true });
+    await safeDeferReply(interaction);
 
     const supplierId = Number(interaction.customId.split(':')[1]);
     if (!supplierId) return interaction.editReply('❌ ID inválido.');
@@ -1786,7 +1785,7 @@ if (interaction.isButton()) {
 
     supplierDraft.set(interaction.user.id, { mode: 'edit', supplierId, messageId: interaction.message?.id });
 
-    return safeShowModal(interaction,
+    return interaction.showModal(
       supplierModalCreate(
         { nome: rec.nome, pombo: rec.pombo, localidade: rec.localidade, obs: rec.obs || '', produtosText },
         'supplier_edit_modal_submit'
@@ -1803,7 +1802,7 @@ if (interaction.isButton()) {
       }
 
       if (interaction.customId === 'armazenar_confirmar') {
-        await interaction.deferReply({ ephemeral: true });
+        await safeDeferReply(interaction);
 
         const s = session.get(interaction.user.id);
         if (!s) return interaction.editReply('⚠️ Sessão expirou. Use /armazenar de novo.');
