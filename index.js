@@ -1819,7 +1819,17 @@ if (interaction.isButton()) {
       }
     }
   } catch (e) {
-    console.error(e);
+    const details = {
+      name: e?.name,
+      message: e?.message,
+      code: e?.code,
+      status: e?.status,
+      method: e?.method,
+      url: e?.url,
+      stack: e?.stack,
+      rawError: e?.rawError,
+    };
+    console.error('❌ InteractionCreate error:', details);
     try {
       if (interaction.deferred || interaction.replied) {
         await interaction.editReply('❌ Ocorreu um erro. Veja o console do bot.');
