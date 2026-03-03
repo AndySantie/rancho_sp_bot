@@ -998,15 +998,6 @@ if (cmd === 'cadastrar') {
         const fixar = interaction.options.getBoolean('fixar', false) ?? false;
         const canalReferencia = interaction.options.getChannel('canal_referencia', false);
 
-// ✅ Canal de referência (uma vez só)
-if (canalReferencia) {
-  embed.addFields({
-    name: '🔗 Maiores informações acesse:',
-    value: canalReferencia.toString(),
-    inline: false
-  });
-}
-
 
         const mencionar = interaction.options.getMentionable('mencionar', false);
         const allowEveryone = interaction.options.getBoolean('everyone', false) ?? false;
@@ -1042,9 +1033,7 @@ if (canalReferencia) {
         const finalTitle = (titulo && titulo.trim().length)
           ? `📣 ${titulo.trim()}`
           : '📣 Anúncio — Rancho SP';
-        const desc =
-          mensagem +
-          (canalReferencia ? `\n\n🔗 **🔗 Maiores informações acesse:** ${canalReferencia.toString()}` : '');
+        const desc = mensagem;
 
         const embed = new EmbedBuilder()
           .setTitle(finalTitle)
@@ -1052,9 +1041,13 @@ if (canalReferencia) {
           .setFooter({ text: 'Rancho SP • Haras Management' })
           .setTimestamp(new Date());
 
-        // ✅ Também coloca em FIELD (pra ficar bem visível e organizado)
+        // ✅ Canal de referência (uma vez só)
         if (canalReferencia) {
-
+          embed.addFields({
+            name: '🔗 Maiores informações acesse:',
+            value: canalReferencia.toString(),
+            inline: false
+          });
         }
 
         const logoPath = path.join(__dirname, 'assets', 'ranchosp.png');
@@ -1819,17 +1812,7 @@ if (interaction.isButton()) {
       }
     }
   } catch (e) {
-    const details = {
-      name: e?.name,
-      message: e?.message,
-      code: e?.code,
-      status: e?.status,
-      method: e?.method,
-      url: e?.url,
-      stack: e?.stack,
-      rawError: e?.rawError,
-    };
-    console.error('❌ InteractionCreate error:', details);
+    console.error(e);
     try {
       if (interaction.deferred || interaction.replied) {
         await interaction.editReply('❌ Ocorreu um erro. Veja o console do bot.');
