@@ -15,9 +15,6 @@ const {
   EmbedBuilder
 } = require('discord.js');
 
-
-// Discord flags (64 = Ephemeral)
-const EPHEMERAL_FLAG = 1 << 6;
 const { stringify } = require('csv-stringify/sync');
 const path = require('path');
 const fs = require('fs');
@@ -146,8 +143,8 @@ async function safeShowModal(interaction, modal) {
 async function safeDeferReply(interaction) {
   try {
     if (interaction.deferred || interaction.replied) return;
-    // 'ephemeral' option is deprecated in newer discord.js; use flags.
-    return await interaction.deferReply({ flags: EPHEMERAL_FLAG });
+    // flags: 64 = Ephemeral (substitui 'flags: 64' que foi depreciado)
+    return await interaction.deferReply({ flags: 64 });
   } catch (e) {
     // 10062 = Unknown interaction (expirou / já respondida)
     if (e?.code === 10062) return;
@@ -918,7 +915,7 @@ try {
     
 if (interaction.isButton() && interaction.customId === 'supplier_open_modal') {
   if (!isStaff(interaction.member)) {
-    return interaction.reply({ content: '❌ Apenas Gerência/Proprietário.', ephemeral: true });
+    return interaction.reply({ content: '❌ Apenas Gerência/Proprietário.', flags: 64 });
   }
   return safeShowModal(interaction, supplierModalCreate());
 }
@@ -930,7 +927,7 @@ if (interaction.isButton() && interaction.customId === 'register_open_modal') {
     
 if (interaction.isModalSubmit() && interaction.customId === 'supplier_create_modal_submit') {
   if (!isStaff(interaction.member)) {
-    return interaction.reply({ content: '❌ Apenas Gerência/Proprietário.', ephemeral: true });
+    return interaction.reply({ content: '❌ Apenas Gerência/Proprietário.', flags: 64 });
   }
 
   await safeDeferReply(interaction);
@@ -1014,7 +1011,7 @@ if (interaction.isModalSubmit() && interaction.customId === 'register_modal_subm
 
 if (cmd === 'cadastrar') {
   if (!isStaff(interaction.member)) {
-    return interaction.reply({ content: '❌ Apenas Gerência/Proprietário.', ephemeral: true });
+    return interaction.reply({ content: '❌ Apenas Gerência/Proprietário.', flags: 64 });
   }
   return safeShowModal(interaction, supplierModalCreate());
 }
@@ -1022,7 +1019,7 @@ if (cmd === 'cadastrar') {
 
       if (cmd === 'anunciar') {
         if (!isStaff(interaction.member)) {
-          return interaction.reply({ content: '❌ Apenas Gerência/Proprietário.', ephemeral: true });
+          return interaction.reply({ content: '❌ Apenas Gerência/Proprietário.', flags: 64 });
         }
 
         await safeDeferReply(interaction);
@@ -1186,7 +1183,7 @@ if (cmd === 'cadastrar') {
 
       if (cmd === 'total_funcionario') {
         if (!isStaff(interaction.member)) {
-          return interaction.reply({ content: '❌ Apenas Gerência/Proprietário.', ephemeral: true });
+          return interaction.reply({ content: '❌ Apenas Gerência/Proprietário.', flags: 64 });
         }
         await safeDeferReply(interaction);
 
@@ -1205,7 +1202,7 @@ if (cmd === 'cadastrar') {
 
       if (cmd === 'resumo_dia') {
         if (!isStaff(interaction.member)) {
-          return interaction.reply({ content: '❌ Apenas Gerência/Proprietário.', ephemeral: true });
+          return interaction.reply({ content: '❌ Apenas Gerência/Proprietário.', flags: 64 });
         }
         await safeDeferReply(interaction);
 
@@ -1229,7 +1226,7 @@ if (cmd === 'cadastrar') {
 
       if (cmd === 'exportar_csv') {
         if (!isStaff(interaction.member)) {
-          return interaction.reply({ content: '❌ Apenas Gerência/Proprietário.', ephemeral: true });
+          return interaction.reply({ content: '❌ Apenas Gerência/Proprietário.', flags: 64 });
         }
         await safeDeferReply(interaction);
 
@@ -1266,7 +1263,7 @@ if (cmd === 'cadastrar') {
 
       if (cmd === 'preco_lista') {
         if (!isStaff(interaction.member)) {
-          return interaction.reply({ content: '❌ Apenas Gerência/Proprietário.', ephemeral: true });
+          return interaction.reply({ content: '❌ Apenas Gerência/Proprietário.', flags: 64 });
         }
         await safeDeferReply(interaction);
 
@@ -1281,7 +1278,7 @@ if (cmd === 'cadastrar') {
 
       if (cmd === 'preco_set') {
         if (!isStaff(interaction.member)) {
-          return interaction.reply({ content: '❌ Apenas Gerência/Proprietário.', ephemeral: true });
+          return interaction.reply({ content: '❌ Apenas Gerência/Proprietário.', flags: 64 });
         }
         await safeDeferReply(interaction);
 
@@ -1296,7 +1293,7 @@ if (cmd === 'cadastrar') {
 
       if (cmd === 'pagamento') {
         if (!isStaff(interaction.member)) {
-          return interaction.reply({ content: '❌ Apenas Gerência/Proprietário.', ephemeral: true });
+          return interaction.reply({ content: '❌ Apenas Gerência/Proprietário.', flags: 64 });
         }
         await safeDeferReply(interaction);
 
@@ -1320,7 +1317,7 @@ if (cmd === 'cadastrar') {
 
       if (cmd === 'pagar') {
         if (!isStaff(interaction.member)) {
-          return interaction.reply({ content: '❌ Apenas Gerência/Proprietário.', ephemeral: true });
+          return interaction.reply({ content: '❌ Apenas Gerência/Proprietário.', flags: 64 });
         }
         await safeDeferReply(interaction);
 
@@ -1390,7 +1387,7 @@ if (cmd === 'cadastrar') {
 
       if (cmd === 'ranking') {
         if (!isStaff(interaction.member)) {
-          return interaction.reply({ content: '❌ Apenas Gerência/Proprietário.', ephemeral: true });
+          return interaction.reply({ content: '❌ Apenas Gerência/Proprietário.', flags: 64 });
         }
         await safeDeferReply(interaction);
 
@@ -1408,7 +1405,7 @@ if (cmd === 'cadastrar') {
 
       if (cmd === 'cancelar_registro') {
         if (!isStaff(interaction.member)) {
-          return interaction.reply({ content: '❌ Apenas Gerência/Proprietário.', ephemeral: true });
+          return interaction.reply({ content: '❌ Apenas Gerência/Proprietário.', flags: 64 });
         }
         await safeDeferReply(interaction);
 
@@ -1444,7 +1441,7 @@ if (cmd === 'cadastrar') {
 
       if (cmd === 'listar_registros') {
         if (!isStaff(interaction.member)) {
-          return interaction.reply({ content: '❌ Apenas Gerência/Proprietário.', ephemeral: true });
+          return interaction.reply({ content: '❌ Apenas Gerência/Proprietário.', flags: 64 });
         }
         await safeDeferReply(interaction);
 
@@ -1494,7 +1491,7 @@ if (cmd === 'cadastrar') {
 
       if (cmd === 'cancelar_lote') {
         if (!isStaff(interaction.member)) {
-          return interaction.reply({ content: '❌ Apenas Gerência/Proprietário.', ephemeral: true });
+          return interaction.reply({ content: '❌ Apenas Gerência/Proprietário.', flags: 64 });
         }
         await safeDeferReply(interaction);
 
@@ -1550,7 +1547,7 @@ if (cmd === 'cadastrar') {
 
       if (cmd === 'apagar_pasta') {
         if (!isStaff(interaction.member)) {
-          return interaction.reply({ content: '❌ Apenas Gerência/Proprietário.', ephemeral: true });
+          return interaction.reply({ content: '❌ Apenas Gerência/Proprietário.', flags: 64 });
         }
         await safeDeferReply(interaction);
 
@@ -1579,11 +1576,11 @@ if (cmd === 'cadastrar') {
 
     if (interaction.isStringSelectMenu() && interaction.customId === 'armazenar_select_item') {
       const s = session.get(interaction.user.id);
-      if (!s) return interaction.reply({ content: '⚠️ Sessão expirou. Use /armazenar de novo.', ephemeral: true });
-      if (interaction.channelId !== s.threadId) return interaction.reply({ content: '⚠️ Use dentro da sua pasta.', ephemeral: true });
+      if (!s) return interaction.reply({ content: '⚠️ Sessão expirou. Use /armazenar de novo.', flags: 64 });
+      if (interaction.channelId !== s.threadId) return interaction.reply({ content: '⚠️ Use dentro da sua pasta.', flags: 64 });
 
       const itemKey = interaction.values[0];
-      if (!getItem(itemKey)) return interaction.reply({ content: '❌ Item inválido.', ephemeral: true });
+      if (!getItem(itemKey)) return interaction.reply({ content: '❌ Item inválido.', flags: 64 });
 
       s.itemKey = itemKey;
       session.set(interaction.user.id, s);
@@ -1594,7 +1591,7 @@ if (cmd === 'cadastrar') {
     
 if (interaction.isModalSubmit() && interaction.customId === 'supplier_edit_modal_submit') {
   if (!isStaff(interaction.member)) {
-    return interaction.reply({ content: '❌ Apenas Gerência/Proprietário.', ephemeral: true });
+    return interaction.reply({ content: '❌ Apenas Gerência/Proprietário.', flags: 64 });
   }
 
   await safeDeferReply(interaction);
@@ -1694,17 +1691,17 @@ if (interaction.isButton()) {
   // =====================
   if (interaction.customId === 'supplier_cancel') {
     supplierDraft.delete(interaction.user.id);
-    return interaction.reply({ content: '❌ Cadastro cancelado.', ephemeral: true });
+    return interaction.reply({ content: '❌ Cadastro cancelado.', flags: 64 });
   }
 
   if (interaction.customId === 'supplier_confirm_post') {
     if (!isStaff(interaction.member)) {
-      return interaction.reply({ content: '❌ Apenas Gerência/Proprietário.', ephemeral: true });
+      return interaction.reply({ content: '❌ Apenas Gerência/Proprietário.', flags: 64 });
     }
 
     const payload = supplierDraft.get(interaction.user.id);
     if (!payload?.data) {
-      return interaction.reply({ content: '⚠️ Prévia expirou. Use /cadastrar novamente.', ephemeral: true });
+      return interaction.reply({ content: '⚠️ Prévia expirou. Use /cadastrar novamente.', flags: 64 });
     }
 
     await safeDeferReply(interaction);
@@ -1745,7 +1742,7 @@ if (interaction.isButton()) {
 
   if (interaction.customId.startsWith('supplier_delete:')) {
     if (!isStaff(interaction.member)) {
-      return interaction.reply({ content: '❌ Apenas Gerência/Proprietário.', ephemeral: true });
+      return interaction.reply({ content: '❌ Apenas Gerência/Proprietário.', flags: 64 });
     }
 
     await safeDeferReply(interaction);
@@ -1770,13 +1767,13 @@ if (interaction.isButton()) {
 
   if (interaction.customId.startsWith('supplier_edit:')) {
     if (!isStaff(interaction.member)) {
-      return interaction.reply({ content: '❌ Apenas Gerência/Proprietário.', ephemeral: true });
+      return interaction.reply({ content: '❌ Apenas Gerência/Proprietário.', flags: 64 });
     }
 
     const supplierId = Number(interaction.customId.split(':')[1]);
     const suppliers = loadSuppliers();
     const rec = suppliers.find(x => Number(x.id) === supplierId);
-    if (!rec) return interaction.reply({ content: '❌ Cadastro não encontrado no JSON.', ephemeral: true });
+    if (!rec) return interaction.reply({ content: '❌ Cadastro não encontrado no JSON.', flags: 64 });
 
     const produtosText = (rec.produtos || [])
       .slice(0, 10)
@@ -1798,7 +1795,7 @@ if (interaction.isButton()) {
   // =====================
       if (interaction.customId === 'armazenar_cancelar') {
         session.delete(interaction.user.id);
-        return interaction.reply({ content: '❌ Registro cancelado.', ephemeral: true });
+        return interaction.reply({ content: '❌ Registro cancelado.', flags: 64 });
       }
 
       if (interaction.customId === 'armazenar_confirmar') {
@@ -1853,7 +1850,7 @@ if (interaction.isButton()) {
       if (interaction.deferred || interaction.replied) {
         await interaction.editReply('❌ Ocorreu um erro. Veja o console do bot.');
       } else {
-        await interaction.reply({ content: '❌ Ocorreu um erro. Veja o console do bot.', ephemeral: true });
+        await interaction.reply({ content: '❌ Ocorreu um erro. Veja o console do bot.', flags: 64 });
       }
     } catch {}
   }
