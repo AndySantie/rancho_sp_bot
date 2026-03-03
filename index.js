@@ -998,6 +998,16 @@ if (cmd === 'cadastrar') {
         const fixar = interaction.options.getBoolean('fixar', false) ?? false;
         const canalReferencia = interaction.options.getChannel('canal_referencia', false);
 
+// ✅ Canal de referência (uma vez só)
+if (canalReferencia) {
+  embed.addFields({
+    name: '🔗 Maiores informações acesse:',
+    value: canalReferencia.toString(),
+    inline: false
+  });
+}
+
+
         const mencionar = interaction.options.getMentionable('mencionar', false);
         const allowEveryone = interaction.options.getBoolean('everyone', false) ?? false;
         const allowHere = interaction.options.getBoolean('here', false) ?? false;
@@ -1032,11 +1042,9 @@ if (cmd === 'cadastrar') {
         const finalTitle = (titulo && titulo.trim().length)
           ? `📣 ${titulo.trim()}`
           : '📣 Anúncio — Rancho SP';
-
-        // ✅ DESCRIÇÃO: mensagem + (se tiver) canal de referência em linha separada
         const desc =
           mensagem +
-          (canalReferencia ? `\n\n🔗 **Canal de referência:** ${canalReferencia.toString()}` : '');
+          (canalReferencia ? `\n\n🔗 **🔗 Maiores informações acesse:** ${canalReferencia.toString()}` : '');
 
         const embed = new EmbedBuilder()
           .setTitle(finalTitle)
@@ -1046,7 +1054,7 @@ if (cmd === 'cadastrar') {
 
         // ✅ Também coloca em FIELD (pra ficar bem visível e organizado)
         if (canalReferencia) {
-          embed.addFields({ name: '🔗 Canal de referência', value: canalReferencia.toString(), inline: false });
+
         }
 
         const logoPath = path.join(__dirname, 'assets', 'ranchosp.png');
