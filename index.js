@@ -1769,7 +1769,7 @@ if (interaction.isButton()) {
 
     supplierDraft.set(interaction.user.id, { mode: 'edit', supplierId, messageId: interaction.message?.id });
 
-    return interaction.showModal(
+    return safeShowModal(interaction,
       supplierModalCreate(
         { nome: rec.nome, pombo: rec.pombo, localidade: rec.localidade, obs: rec.obs || '', produtosText },
         'supplier_edit_modal_submit'
