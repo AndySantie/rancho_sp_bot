@@ -425,6 +425,35 @@ function savePanels(p) {
   writeJson(panelsFile, p || {});
 }
 
+function getTextChannelByIdOrName(guild, id, names = []) {
+  if (id) {
+    const byId = guild.channels.cache.get(id);
+    if (byId && byId.type === ChannelType.GuildText) return byId;
+  }
+  return guild.channels.cache.find(c =>
+    c &&
+    c.type === ChannelType.GuildText &&
+    names.some(name => c.name === name)
+  ) || null;
+}
+
+function channelMentionById(guild, channelId, fallbackName) {
+  if (!channelId) return fallbackName ? `#${fallbackName}` : 'este canal';
+  const ch = guild.channels.cache.get(channelId);
+  if (ch) return `${ch}`;
+  return fallbackName ? `#${fallbackName}` : `<#${channelId}>`;
+}
+
+async function applyRoleById(member, roleId, reason) {
+  if (!roleId) throw new Error('ROLE_ID_MISSING');
+  const role = member.guild.roles.cache.get(roleId) || await member.guild.roles.fetch(roleId).catch(() => null);
+  if (!role) throw new Error('ROLE_NOT_FOUND');
+  if (!member.roles.cache.has(role.id)) {
+    await member.roles.add(role, reason);
+  }
+  return role;
+}
+
 function loadSuppliers() { return readJson(suppliersFile, []); }
 function saveSuppliers(d) { writeJson(suppliersFile, d); }
 
@@ -630,50 +659,171 @@ async function upsertPanelMessage({ key, channelId, content, components }) {
 function registerButtonRow() {
   return new ActionRowBuilder().addComponents(
     new ButtonBuilder()
-      .setCustomId('register_open_modal')
-      .setLabel('Registrar')
-      .setStyle(ButtonStyle.Primary)
+      .setCustomId('register_employee_open_modal')
+      .setLabel('Funcionário')
+      .setEmoji('🤠')
+      .setStyle(ButtonStyle.Primary),
+    new ButtonBuilder()
+      .setCustomId('register_sponsor_open_modal')
+      .setLabel('Patrocinador')
+      .setEmoji('💰')
+      .setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder()
+      .setCustomId('register_participant_open_modal')
+      .setLabel('Participante')
+      .setEmoji('🏇')
+      .setStyle(ButtonStyle.Success)
   );
 }
 
-function registerModal() {
+function registerEmployeeModal() {
   const modal = new ModalBuilder()
-    .setCustomId('register_modal_submit')
-    .setTitle('Registro — HARAS RANCHO SP');
+    .setCustomId('register_employee_modal_submit')
+    .setTitle('Registro — Funcionário');
 
   const rpName = new TextInputBuilder()
     .setCustomId('rp_name')
-    .setLabel('Nome do personagem (RP)')
+    .setLabel('Nome')
     .setStyle(TextInputStyle.Short)
     .setRequired(true)
     .setPlaceholder('Ex: João Ferraz');
 
   const bagId = new TextInputBuilder()
     .setCustomId('bag_id')
-    .setLabel('Bolsa (ID)')
-    .setPlaceholder('Digite o número que aparece no seu inventário')
+    .setLabel('Pombo')
     .setStyle(TextInputStyle.Short)
     .setRequired(true)
     .setPlaceholder('Ex: 1024');
 
+  const county = new TextInputBuilder()
+    .setCustomId('county')
+    .setLabel('Condado')
+    .setStyle(TextInputStyle.Short)
+    .setRequired(true)
+    .setPlaceholder('Ex: New Hanover');
+
   modal.addComponents(
     new ActionRowBuilder().addComponents(rpName),
-    new ActionRowBuilder().addComponents(bagId)
+    new ActionRowBuilder().addComponents(bagId),
+    new ActionRowBuilder().addComponents(county)
+  );
+
+  return modal;
+}
+
+function registerSponsorModal() {
+  const modal = new ModalBuilder()
+    .setCustomId('register_sponsor_modal_submit')
+    .setTitle('Registro — Patrocinador');
+
+  const nome = new TextInputBuilder()
+    .setCustomId('nome')
+    .setLabel('Nome')
+    .setStyle(TextInputStyle.Short)
+    .setRequired(true)
+    .setPlaceholder('Ex: Hermelino Miller');
+
+  const empresa = new TextInputBuilder()
+    .setCustomId('empresa')
+    .setLabel('Empresa')
+    .setStyle(TextInputStyle.Short)
+    .setRequired(true)
+    .setPlaceholder('Ex: Rancho Miller');
+
+  const condado = new TextInputBuilder()
+    .setCustomId('condado')
+    .setLabel('Condado')
+    .setStyle(TextInputStyle.Short)
+    .setRequired(true)
+    .setPlaceholder('Ex: West Elizabeth');
+
+  const pombo = new TextInputBuilder()
+    .setCustomId('pombo')
+    .setLabel('Pombo')
+    .setStyle(TextInputStyle.Short)
+    .setRequired(true)
+    .setPlaceholder('Ex: 204');
+
+  modal.addComponents(
+    new ActionRowBuilder().addComponents(nome),
+    new ActionRowBuilder().addComponents(empresa),
+    new ActionRowBuilder().addComponents(condado),
+    new ActionRowBuilder().addComponents(pombo)
+  );
+
+  return modal;
+}
+
+function registerParticipantModal() {
+  const modal = new ModalBuilder()
+    .setCustomId('register_participant_modal_submit')
+    .setTitle('Registro — Participante');
+
+  const nome = new TextInputBuilder()
+    .setCustomId('nome')
+    .setLabel('Nome')
+    .setStyle(TextInputStyle.Short)
+    .setRequired(true)
+    .setPlaceholder('Ex: Arthur Morgan');
+
+  const pombo = new TextInputBuilder()
+    .setCustomId('pombo')
+    .setLabel('Pombo')
+    .setStyle(TextInputStyle.Short)
+    .setRequired(true)
+    .setPlaceholder('Ex: 565');
+
+  const cavalo = new TextInputBuilder()
+    .setCustomId('cavalo')
+    .setLabel('Nome do Cavalo')
+    .setStyle(TextInputStyle.Short)
+    .setRequired(true)
+    .setPlaceholder('Ex: Tempestade');
+
+  const raca = new TextInputBuilder()
+    .setCustomId('raca')
+    .setLabel('Raça')
+    .setStyle(TextInputStyle.Short)
+    .setRequired(true)
+    .setPlaceholder('Ex: Árabe');
+
+  modal.addComponents(
+    new ActionRowBuilder().addComponents(nome),
+    new ActionRowBuilder().addComponents(pombo),
+    new ActionRowBuilder().addComponents(cavalo),
+    new ActionRowBuilder().addComponents(raca)
   );
 
   return modal;
 }
 
 async function ensureRegisterPanel() {
-  const channelId = cfg.channels?.registerChannelId;
+  let channelId = cfg.channels?.registerChannelId;
+  if (!channelId) {
+    const firstGuild = client.guilds.cache.first();
+    const byName = firstGuild?.channels.cache.find(c => c && c.type === ChannelType.GuildText && c.name === 'registro');
+    channelId = byName?.id;
+  }
   if (!channelId) return;
 
   const text =
-    '📌 **REGISTRO AUTOMÁTICO — HARAS RANCHO SP**\n' +
-    'Clique no botão abaixo e preencha:\n' +
-    '• **Nome do personagem (RP)**\n' +
-    '• **Bolsa (ID - o numero que aparece no seu iventário)**\n\n' +
-    'Após enviar, você receberá o cargo **Funcionário** e seu nick será ajustado.';
+    '📌 **REGISTRO AUTOMÁTICO — HARAS RANCHO SP**\n\n' +
+    'Escolha a opção correta abaixo e preencha o formulário correspondente.\n\n' +
+    '🤠 **Funcionário**\n' +
+    '• Nome\n' +
+    '• Pombo\n' +
+    '• Condado\n\n' +
+    '💰 **Patrocinador**\n' +
+    '• Nome\n' +
+    '• Empresa\n' +
+    '• Condado\n' +
+    '• Pombo\n\n' +
+    '🏇 **Participante**\n' +
+    '• Nome\n' +
+    '• Pombo\n' +
+    '• Nome do Cavalo\n' +
+    '• Raça\n\n' +
+    'Após enviar, o acesso será liberado automaticamente conforme o cargo escolhido.';
 
   await upsertPanelMessage({
     key: 'register',
@@ -839,16 +989,21 @@ async function sendWelcome(member) {
   const hasLogo = fs.existsSync(logoPath);
   const attachment = hasLogo ? new AttachmentBuilder(logoPath) : null;
 
+  const registerMention = channelMentionById(member.guild, cfg.channels?.registerChannelId || getTextChannelByIdOrName(member.guild, null, ['registro'])?.id, 'registro');
+  const visitorsMention = channelMentionById(member.guild, cfg.channels?.visitorChatChannelId || getTextChannelByIdOrName(member.guild, null, ['chat-visitantes', 'chat visitantes'])?.id, 'chat-visitantes');
+
   const embed = new EmbedBuilder()
     .setTitle('🐴 Bem-vindo(a) ao HARAS RANCHO SP')
     .setDescription(
       `Seja bem-vindo(a), ${member}!\n\n` +
       `📌 **Primeiro passo**\n` +
-      `• Vá em **#registro** e clique em **Registrar**\n\n` +
-      `📦 **Farm (Funcionários)**\n` +
-      `• Leia o passo a passo em **#registros-farm**\n\n` +
-      `🧭 **Dica rápida**\n` +
-      `• Qualquer dúvida, fale com a **Gerência**.\n\n` +
+      `• Se você está sendo contratado, vá até ${registerMention} e clique em **🤠 Funcionário**.\n\n` +
+      `💰 **Patrocínio de eventos**\n` +
+      `• Se você é patrocinador, vá até ${registerMention} e clique em **💰 Patrocinador**.\n\n` +
+      `🏇 **Participação em eventos**\n` +
+      `• Se você vai participar de um evento, vá até ${registerMention} e clique em **🏇 Participante**.\n\n` +
+      `🛟 **Suporte**\n` +
+      `• Se o registro falhar ou tiver qualquer dúvida, use ${visitorsMention}.\n\n` +
       `_${SEP}_`
     )
     .setFooter({ text: 'Rancho SP • RedM Server' })
@@ -920,8 +1075,16 @@ if (interaction.isButton() && interaction.customId === 'supplier_open_modal') {
   return safeShowModal(interaction, supplierModalCreate());
 }
 
-if (interaction.isButton() && interaction.customId === 'register_open_modal') {
-      return safeShowModal(interaction, registerModal());
+if (interaction.isButton() && interaction.customId === 'register_employee_open_modal') {
+      return safeShowModal(interaction, registerEmployeeModal());
+    }
+
+if (interaction.isButton() && interaction.customId === 'register_sponsor_open_modal') {
+      return safeShowModal(interaction, registerSponsorModal());
+    }
+
+if (interaction.isButton() && interaction.customId === 'register_participant_open_modal') {
+      return safeShowModal(interaction, registerParticipantModal());
     }
 
     
@@ -964,34 +1127,31 @@ if (interaction.isModalSubmit() && interaction.customId === 'supplier_create_mod
   });
 }
 
-if (interaction.isModalSubmit() && interaction.customId === 'register_modal_submit') {
+if (interaction.isModalSubmit() && interaction.customId === 'register_employee_modal_submit') {
       await safeDeferReply(interaction);
 
       const rp = interaction.fields.getTextInputValue('rp_name').trim();
       const bag = interaction.fields.getTextInputValue('bag_id').trim();
+      const county = interaction.fields.getTextInputValue('county').trim();
 
-      if (!rp || rp.length < 3) return interaction.editReply('❌ Nome RP inválido.');
-      if (!bag || bag.length < 1 || bag.length > 20) return interaction.editReply('❌ Bolsa (ID) inválida.');
+      if (!rp || rp.length < 3) return interaction.editReply('❌ Nome inválido.');
+      if (!bag || bag.length < 1 || bag.length > 20) return interaction.editReply('❌ Pombo inválido.');
+      if (!county || county.length < 2) return interaction.editReply('❌ Condado inválido.');
 
       const roleId = cfg.roles?.employeeRoleId;
       if (!roleId) return interaction.editReply('⚠️ employeeRoleId não configurado no config.json.');
 
       const member = interaction.member;
-      const role = interaction.guild.roles.cache.get(roleId) || await interaction.guild.roles.fetch(roleId).catch(() => null);
-      if (!role) return interaction.editReply('⚠️ Cargo Funcionário não encontrado (roleId inválido).');
-
       try {
-        if (!member.roles.cache.has(role.id)) {
-          await member.roles.add(role, 'Registro automático (bot)');
-        }
+        await applyRoleById(member, roleId, 'Registro automático (Funcionário)');
       } catch (e) {
         console.error(e);
-        return interaction.editReply('❌ Não consegui dar o cargo. Verifique se o cargo do bot está acima do cargo Funcionário e se ele tem Manage Roles.');
+        return interaction.editReply('❌ Não consegui dar o cargo de Funcionário. Verifique se o cargo do bot está acima do cargo e se ele tem Manage Roles.');
       }
 
       const nick = safeNick(`${interaction.user.username} (vulgo ${rp} - ${bag})`);
       try {
-        await member.setNickname(nick, 'Registro automático (bot)');
+        await member.setNickname(nick, 'Registro automático (Funcionário)');
       } catch (e) {
         console.error(e);
         return interaction.editReply(
@@ -1000,7 +1160,65 @@ if (interaction.isModalSubmit() && interaction.customId === 'register_modal_subm
         );
       }
 
-      return interaction.editReply(`✅ Registrado com sucesso!\n• Cargo: **Funcionário**\n• Nick: **${nick}**`);
+      return interaction.editReply(
+        `✅ Registrado com sucesso!\n• Cargo: **Funcionário**\n• Nome: **${rp}**\n• Pombo: **${bag}**\n• Condado: **${county}**\n• Nick: **${nick}**`
+      );
+    }
+
+if (interaction.isModalSubmit() && interaction.customId === 'register_sponsor_modal_submit') {
+      await safeDeferReply(interaction);
+
+      const nome = interaction.fields.getTextInputValue('nome').trim();
+      const empresa = interaction.fields.getTextInputValue('empresa').trim();
+      const condado = interaction.fields.getTextInputValue('condado').trim();
+      const pombo = interaction.fields.getTextInputValue('pombo').trim();
+
+      if (!nome || nome.length < 3) return interaction.editReply('❌ Nome inválido.');
+      if (!empresa || empresa.length < 2) return interaction.editReply('❌ Empresa inválida.');
+      if (!condado || condado.length < 2) return interaction.editReply('❌ Condado inválido.');
+      if (!pombo || pombo.length < 1 || pombo.length > 20) return interaction.editReply('❌ Pombo inválido.');
+
+      const roleId = cfg.roles?.sponsorRoleId;
+      if (!roleId) return interaction.editReply('⚠️ sponsorRoleId não configurado no config.json.');
+
+      try {
+        await applyRoleById(interaction.member, roleId, 'Registro automático (Patrocinador)');
+      } catch (e) {
+        console.error(e);
+        return interaction.editReply('❌ Não consegui dar o cargo de Patrocinador. Verifique a hierarquia de cargos do bot.');
+      }
+
+      return interaction.editReply(
+        `✅ Registrado com sucesso!\n• Cargo: **Patrocinador**\n• Nome: **${nome}**\n• Empresa: **${empresa}**\n• Condado: **${condado}**\n• Pombo: **${pombo}**`
+      );
+    }
+
+if (interaction.isModalSubmit() && interaction.customId === 'register_participant_modal_submit') {
+      await safeDeferReply(interaction);
+
+      const nome = interaction.fields.getTextInputValue('nome').trim();
+      const pombo = interaction.fields.getTextInputValue('pombo').trim();
+      const cavalo = interaction.fields.getTextInputValue('cavalo').trim();
+      const raca = interaction.fields.getTextInputValue('raca').trim();
+
+      if (!nome || nome.length < 3) return interaction.editReply('❌ Nome inválido.');
+      if (!pombo || pombo.length < 1 || pombo.length > 20) return interaction.editReply('❌ Pombo inválido.');
+      if (!cavalo || cavalo.length < 2) return interaction.editReply('❌ Nome do cavalo inválido.');
+      if (!raca || raca.length < 2) return interaction.editReply('❌ Raça inválida.');
+
+      const roleId = cfg.roles?.participantRoleId;
+      if (!roleId) return interaction.editReply('⚠️ participantRoleId não configurado no config.json.');
+
+      try {
+        await applyRoleById(interaction.member, roleId, 'Registro automático (Participante)');
+      } catch (e) {
+        console.error(e);
+        return interaction.editReply('❌ Não consegui dar o cargo de Participante. Verifique a hierarquia de cargos do bot.');
+      }
+
+      return interaction.editReply(
+        `✅ Registrado com sucesso!\n• Cargo: **Participante**\n• Nome: **${nome}**\n• Pombo: **${pombo}**\n• Cavalo: **${cavalo}**\n• Raça: **${raca}**`
+      );
     }
 
     // =====================

@@ -5,13 +5,23 @@
   "roles": {
     "ownerRoleId": "1477303357696643243",
     "managerRoleId": "1477303573678391316",
-    "employeeRoleId": "1477303771242430544"
+    "employeeRoleId": "1477303771242430544",
+    "sponsorRoleId": "1480185028716662924",
+    "participantRoleId": "1480185268320473270"
   },
   "channels": {
     "farmHubChannelId": "1477305326507266150",
     "logChannelId": "1477305272857792542",
     "logPaymentsChannelId": "1477338749934506087",
-    "rankingChannelId": "1477352414469165228"
+    "rankingChannelId": "1477352414469165228",
+    "visitorChatChannelId": "1480200459720331416",
+    "eventCategoryId": "1480159674102972447",
+    "eventChatChannelId": "1480161664845348907",
+    "eventSponsorChannelId": "1480162045683962067",
+    "eventWinnersChannelId": "1480162797068357703",
+    "eventRegistrationChannelId": "1480184927592124416",
+    "eventSponsorVoiceChannelId": "1480162926168899687",
+    "eventParticipantVoiceChannelId": "1480185924045508689"
   },
   "items": [
     {
