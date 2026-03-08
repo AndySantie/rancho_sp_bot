@@ -1177,6 +1177,18 @@ if (interaction.isModalSubmit() && interaction.customId === 'register_sponsor_mo
         return interaction.editReply('❌ Não consegui dar o cargo de Patrocinador. Verifique a hierarquia de cargos do bot.');
       }
 
+      const patrocinadoresChannelId = '1480253754690240654';
+      const patrocinadoresChannel = await interaction.guild.channels.fetch(patrocinadoresChannelId).catch(() => null);
+      if (patrocinadoresChannel && patrocinadoresChannel.isTextBased()) {
+        await patrocinadoresChannel.send(
+          `💰 **NOVO PATROCINADOR**\n\n` +
+          `• Nome: **${nome}**\n` +
+          `• Empresa: **${empresa}**\n` +
+          `• Condado: **${condado}**\n` +
+          `• Pombo: **${pombo}**`
+        ).catch((e) => console.error('Erro ao enviar registro de patrocinador:', e));
+      }
+
       return interaction.editReply(
         `✅ Registrado com sucesso!\n• Cargo: **Patrocinador**\n• Nome: **${nome}**\n• Empresa: **${empresa}**\n• Condado: **${condado}**\n• Pombo: **${pombo}**`
       );
@@ -1203,6 +1215,18 @@ if (interaction.isModalSubmit() && interaction.customId === 'register_participan
       } catch (e) {
         console.error(e);
         return interaction.editReply('❌ Não consegui dar o cargo de Participante. Verifique a hierarquia de cargos do bot.');
+      }
+
+      const inscricoesChannelId = '1480184927592124416';
+      const inscricoesChannel = await interaction.guild.channels.fetch(inscricoesChannelId).catch(() => null);
+      if (inscricoesChannel && inscricoesChannel.isTextBased()) {
+        await inscricoesChannel.send(
+          `🏇 **NOVA INSCRIÇÃO**\n\n` +
+          `• Nome: **${nome}**\n` +
+          `• Pombo: **${pombo}**\n` +
+          `• Nome do Cavalo: **${cavalo}**\n` +
+          `• Raça: **${raca}**`
+        ).catch((e) => console.error('Erro ao enviar inscrição de participante:', e));
       }
 
       return interaction.editReply(
