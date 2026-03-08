@@ -807,23 +807,12 @@ async function ensureRegisterPanel() {
   if (!channelId) return;
 
   const text =
-    '📌 **REGISTRO AUTOMÁTICO — HARAS RANCHO SP**\n\n' +
-    'Escolha a opção correta abaixo e preencha o formulário correspondente.\n\n' +
-    '🤠 **Funcionário**\n' +
-    '• Nome\n' +
-    '• Pombo\n' +
-    '• Condado\n\n' +
-    '💰 **Patrocinador**\n' +
-    '• Nome\n' +
-    '• Empresa\n' +
-    '• Condado\n' +
-    '• Pombo\n\n' +
-    '🏇 **Participante**\n' +
-    '• Nome\n' +
-    '• Pombo\n' +
-    '• Nome do Cavalo\n' +
-    '• Raça\n\n' +
-    'Após enviar, o acesso será liberado automaticamente conforme o cargo escolhido.';
+  '📌 **REGISTRO AUTOMÁTICO — HARAS RANCHO SP**\n\n' +
+  'Escolha a opção correta abaixo e preencha o formulário correspondente.\n\n' +
+  '🤠 **Funcionário**\n\n' +
+  '💰 **Patrocinador**\n\n' +
+  '🏇 **Participante**\n\n' +
+  'Após enviar, o acesso será liberado automaticamente conforme o cargo escolhido.';
 
   await upsertPanelMessage({
     key: 'register',
