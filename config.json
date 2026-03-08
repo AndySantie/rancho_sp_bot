@@ -27,47 +27,47 @@
     {
       "key": "espinafre",
       "label": "Espinafre",
-      "price": 0.1
+      "price": 0.00
     },
     {
       "key": "hortela",
       "label": "Hortelã",
-      "price": 0.11
+      "price": 0.00
     },
     {
       "key": "alcool_industrial",
       "label": "Álcool Industrial",
-      "price": 0.12
+      "price": 0.00
     },
     {
       "key": "seringa_vidro",
       "label": "Seringa de Vidro",
-      "price": 0.13
+      "price": 0.00
     },
     {
       "key": "ripa_madeira",
       "label": "Ripa de Madeira",
-      "price": 0.14
+      "price": 0.00
     },
     {
       "key": "fibra",
       "label": "Fibra",
-      "price": 0.15
+      "price": 0.00
     },
     {
       "key": "cola",
       "label": "Cola",
-      "price": 0.16
+      "price": 0.00
     },
     {
       "key": "ginseng_alasca",
       "label": "Ginseng do Alasca",
-      "price": 0.17
+      "price": 0.00
     },
     {
       "key": "millefaliun",
       "label": "Millefaliun",
-      "price": 0.18
+      "price": 0.00
     }
   ],
   "proof": {
