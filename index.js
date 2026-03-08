@@ -153,16 +153,6 @@ async function safeDeferReply(interaction) {
   }
 }
 
-async function editReplyAndAutoDelete(interaction, payload, delayMs = 8000) {
-  const sent = await interaction.editReply(payload);
-  setTimeout(async () => {
-    try {
-      await interaction.deleteReply();
-    } catch (_) {}
-  }, delayMs);
-  return sent;
-}
-
 // =====================
 // DATA ACCESS
 // =====================
@@ -819,9 +809,20 @@ async function ensureRegisterPanel() {
   const text =
     '📌 **REGISTRO AUTOMÁTICO — HARAS RANCHO SP**\n\n' +
     'Escolha a opção correta abaixo e preencha o formulário correspondente.\n\n' +
-    '🤠 **Funcionário**\n\n' +
-    '💰 **Patrocinador**\n\n' +
-    '🏇 **Participante**\n\n' +
+    '🤠 **Funcionário**\n' +
+    '• Nome\n' +
+    '• Pombo\n' +
+    '• Condado\n\n' +
+    '💰 **Patrocinador**\n' +
+    '• Nome\n' +
+    '• Empresa\n' +
+    '• Condado\n' +
+    '• Pombo\n\n' +
+    '🏇 **Participante**\n' +
+    '• Nome\n' +
+    '• Pombo\n' +
+    '• Nome do Cavalo\n' +
+    '• Raça\n\n' +
     'Após enviar, o acesso será liberado automaticamente conforme o cargo escolhido.';
 
   await upsertPanelMessage({
@@ -886,6 +887,84 @@ async function ensureCommandsPanel() {
     channelId,
     content: text,
     components: []
+  });
+}
+
+
+function absenceButtonRow() {
+  return new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId('absence_open_modal')
+      .setLabel('Registrar ausência')
+      .setStyle(ButtonStyle.Primary)
+  );
+}
+
+function absenceModal() {
+  const modal = new ModalBuilder()
+    .setCustomId('absence_modal_submit')
+    .setTitle('Registro de Ausência');
+
+  const nome = new TextInputBuilder()
+    .setCustomId('nome')
+    .setLabel('Nome')
+    .setStyle(TextInputStyle.Short)
+    .setRequired(true)
+    .setPlaceholder('Ex: João Ferraz');
+
+  const id = new TextInputBuilder()
+    .setCustomId('id')
+    .setLabel('ID')
+    .setStyle(TextInputStyle.Short)
+    .setRequired(true)
+    .setPlaceholder('Ex: 204');
+
+  const motivo = new TextInputBuilder()
+    .setCustomId('motivo')
+    .setLabel('Motivo')
+    .setStyle(TextInputStyle.Paragraph)
+    .setRequired(true)
+    .setPlaceholder('Ex: Viagem / problemas pessoais / trabalho');
+
+  const dataSaida = new TextInputBuilder()
+    .setCustomId('saida')
+    .setLabel('Data afastamento')
+    .setStyle(TextInputStyle.Short)
+    .setRequired(true)
+    .setPlaceholder('Ex: 10/03/2026');
+
+  const dataVolta = new TextInputBuilder()
+    .setCustomId('volta')
+    .setLabel('Data volta')
+    .setStyle(TextInputStyle.Short)
+    .setRequired(true)
+    .setPlaceholder('Ex: 15/03/2026');
+
+  modal.addComponents(
+    new ActionRowBuilder().addComponents(nome),
+    new ActionRowBuilder().addComponents(id),
+    new ActionRowBuilder().addComponents(motivo),
+    new ActionRowBuilder().addComponents(dataSaida),
+    new ActionRowBuilder().addComponents(dataVolta)
+  );
+
+  return modal;
+}
+
+async function ensureAbsencePanel() {
+  const channelId = cfg.channels?.ausenciaChannelId;
+  if (!channelId) return;
+
+  const text =
+    '📋 **REGISTRO DE AUSÊNCIA**\n\n' +
+    'Clique no botão abaixo para registrar sua ausência.\n\n' +
+    'Preencha corretamente as informações solicitadas.';
+
+  await upsertPanelMessage({
+    key: 'absence',
+    channelId,
+    content: text,
+    components: [absenceButtonRow()]
   });
 }
 
@@ -1028,6 +1107,7 @@ client.once(Events.ClientReady, async () => {
   await ensureFarmGuidePanel();
   await ensureCommandsPanel();
   await ensureSuppliersPanel();
+  await ensureAbsencePanel();
   startRankingScheduler();
 });
 
@@ -1074,6 +1154,11 @@ if (interaction.isButton() && interaction.customId === 'supplier_open_modal') {
   return safeShowModal(interaction, supplierModalCreate());
 }
 
+if (interaction.isButton() && interaction.customId === 'absence_open_modal') {
+  return safeShowModal(interaction, absenceModal());
+}
+
+
 if (interaction.isButton() && interaction.customId === 'register_employee_open_modal') {
       return safeShowModal(interaction, registerEmployeeModal());
     }
@@ -1087,6 +1172,35 @@ if (interaction.isButton() && interaction.customId === 'register_participant_ope
     }
 
     
+
+if (interaction.isModalSubmit() && interaction.customId === 'absence_modal_submit') {
+  await safeDeferReply(interaction);
+
+  const nome = interaction.fields.getTextInputValue('nome').trim();
+  const id = interaction.fields.getTextInputValue('id').trim();
+  const motivo = interaction.fields.getTextInputValue('motivo').trim();
+  const saida = interaction.fields.getTextInputValue('saida').trim();
+  const volta = interaction.fields.getTextInputValue('volta').trim();
+
+  const canal = await interaction.guild.channels.fetch(cfg.channels?.ausenciaChannelId).catch(() => null);
+
+  if (canal && canal.isTextBased()) {
+    await canal.send(
+      `📋 **NOVA AUSÊNCIA**\n\n` +
+      `• Nome: **${nome}**\n` +
+      `• ID: **${id}**\n` +
+      `• Motivo: **${motivo}**\n` +
+      `• Data afastamento: **${saida}**\n` +
+      `• Data volta: **${volta}**`
+    ).catch((e) => console.error('Erro ao enviar registro de ausência:', e));
+  }
+
+  return editReplyAndAutoDelete(
+    interaction,
+    `✅ Registro de ausência enviado com sucesso.`
+  );
+}
+
 if (interaction.isModalSubmit() && interaction.customId === 'supplier_create_modal_submit') {
   if (!isStaff(interaction.member)) {
     return interaction.reply({ content: '❌ Apenas Gerência/Proprietário.', flags: 64 });
@@ -1153,15 +1267,13 @@ if (interaction.isModalSubmit() && interaction.customId === 'register_employee_m
         await member.setNickname(nick, 'Registro automático (Funcionário)');
       } catch (e) {
         console.error(e);
-        return editReplyAndAutoDelete(
-          interaction,
+        return interaction.editReply(
           '✅ Cargo **Funcionário** aplicado.\n' +
           '⚠️ Não consegui alterar o nickname. Verifique se o bot tem Manage Nicknames e está acima do cargo do membro.'
         );
       }
 
-      return editReplyAndAutoDelete(
-        interaction,
+      return interaction.editReply(
         `✅ Registrado com sucesso!\n• Cargo: **Funcionário**\n• Nome: **${rp}**\n• Pombo: **${bag}**\n• Condado: **${county}**\n• Nick: **${nick}**`
       );
     }
@@ -1189,20 +1301,7 @@ if (interaction.isModalSubmit() && interaction.customId === 'register_sponsor_mo
         return interaction.editReply('❌ Não consegui dar o cargo de Patrocinador. Verifique a hierarquia de cargos do bot.');
       }
 
-      const patrocinadoresChannelId = '1480253754690240654';
-      const patrocinadoresChannel = await interaction.guild.channels.fetch(patrocinadoresChannelId).catch(() => null);
-      if (patrocinadoresChannel && patrocinadoresChannel.isTextBased()) {
-        await patrocinadoresChannel.send(
-          `💰 **NOVO PATROCINADOR**\n\n` +
-          `• Nome: **${nome}**\n` +
-          `• Empresa: **${empresa}**\n` +
-          `• Condado: **${condado}**\n` +
-          `• Pombo: **${pombo}**`
-        ).catch((e) => console.error('Erro ao enviar registro de patrocinador:', e));
-      }
-
-      return editReplyAndAutoDelete(
-        interaction,
+      return interaction.editReply(
         `✅ Registrado com sucesso!\n• Cargo: **Patrocinador**\n• Nome: **${nome}**\n• Empresa: **${empresa}**\n• Condado: **${condado}**\n• Pombo: **${pombo}**`
       );
     }
@@ -1230,20 +1329,7 @@ if (interaction.isModalSubmit() && interaction.customId === 'register_participan
         return interaction.editReply('❌ Não consegui dar o cargo de Participante. Verifique a hierarquia de cargos do bot.');
       }
 
-      const inscricoesChannelId = '1480184927592124416';
-      const inscricoesChannel = await interaction.guild.channels.fetch(inscricoesChannelId).catch(() => null);
-      if (inscricoesChannel && inscricoesChannel.isTextBased()) {
-        await inscricoesChannel.send(
-          `🏇 **NOVA INSCRIÇÃO**\n\n` +
-          `• Nome: **${nome}**\n` +
-          `• Pombo: **${pombo}**\n` +
-          `• Nome do Cavalo: **${cavalo}**\n` +
-          `• Raça: **${raca}**`
-        ).catch((e) => console.error('Erro ao enviar inscrição de participante:', e));
-      }
-
-      return editReplyAndAutoDelete(
-        interaction,
+      return interaction.editReply(
         `✅ Registrado com sucesso!\n• Cargo: **Participante**\n• Nome: **${nome}**\n• Pombo: **${pombo}**\n• Cavalo: **${cavalo}**\n• Raça: **${raca}**`
       );
     }
