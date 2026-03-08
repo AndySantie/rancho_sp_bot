@@ -153,6 +153,16 @@ async function safeDeferReply(interaction) {
   }
 }
 
+async function editReplyAndAutoDelete(interaction, payload, delayMs = 8000) {
+  const sent = await interaction.editReply(payload);
+  setTimeout(async () => {
+    try {
+      await interaction.deleteReply();
+    } catch (_) {}
+  }, delayMs);
+  return sent;
+}
+
 // =====================
 // DATA ACCESS
 // =====================
@@ -1143,13 +1153,15 @@ if (interaction.isModalSubmit() && interaction.customId === 'register_employee_m
         await member.setNickname(nick, 'Registro automático (Funcionário)');
       } catch (e) {
         console.error(e);
-        return interaction.editReply(
+        return editReplyAndAutoDelete(
+          interaction,
           '✅ Cargo **Funcionário** aplicado.\n' +
           '⚠️ Não consegui alterar o nickname. Verifique se o bot tem Manage Nicknames e está acima do cargo do membro.'
         );
       }
 
-      return interaction.editReply(
+      return editReplyAndAutoDelete(
+        interaction,
         `✅ Registrado com sucesso!\n• Cargo: **Funcionário**\n• Nome: **${rp}**\n• Pombo: **${bag}**\n• Condado: **${county}**\n• Nick: **${nick}**`
       );
     }
@@ -1189,7 +1201,8 @@ if (interaction.isModalSubmit() && interaction.customId === 'register_sponsor_mo
         ).catch((e) => console.error('Erro ao enviar registro de patrocinador:', e));
       }
 
-      return interaction.editReply(
+      return editReplyAndAutoDelete(
+        interaction,
         `✅ Registrado com sucesso!\n• Cargo: **Patrocinador**\n• Nome: **${nome}**\n• Empresa: **${empresa}**\n• Condado: **${condado}**\n• Pombo: **${pombo}**`
       );
     }
@@ -1229,7 +1242,8 @@ if (interaction.isModalSubmit() && interaction.customId === 'register_participan
         ).catch((e) => console.error('Erro ao enviar inscrição de participante:', e));
       }
 
-      return interaction.editReply(
+      return editReplyAndAutoDelete(
+        interaction,
         `✅ Registrado com sucesso!\n• Cargo: **Participante**\n• Nome: **${nome}**\n• Pombo: **${pombo}**\n• Cavalo: **${cavalo}**\n• Raça: **${raca}**`
       );
     }
