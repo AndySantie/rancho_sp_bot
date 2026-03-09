@@ -1659,6 +1659,359 @@ if (interaction.isButton() && interaction.customId === 'farm_show_total') {
 
     
 
+if (interaction.isButton() && interaction.customId === 'mgmt_open_period') {
+      if (!isStaff(interaction.member)) {
+        return interaction.reply({ content: '❌ Apenas Gerência/Proprietário.', flags: 64 });
+      }
+      const row = await buildEmployeeSelectRow(interaction.guild, 'period');
+      if (!row) return interaction.reply({ content: '❌ Nenhum funcionário encontrado para consulta.', flags: 64 });
+      return interaction.reply({
+        content: 'Selecione o funcionário para consultar por período:',
+        components: [row],
+        flags: 64
+      });
+    }
+
+if (interaction.isButton() && interaction.customId === 'mgmt_open_total') {
+      if (!isStaff(interaction.member)) {
+        return interaction.reply({ content: '❌ Apenas Gerência/Proprietário.', flags: 64 });
+      }
+      const row = await buildEmployeeSelectRow(interaction.guild, 'total');
+      if (!row) return interaction.reply({ content: '❌ Nenhum funcionário encontrado para consulta.', flags: 64 });
+      return interaction.reply({
+        content: 'Selecione o funcionário para ver o total:',
+        components: [row],
+        flags: 64
+      });
+    }
+
+if (interaction.isButton() && interaction.customId === 'mgmt_open_day') {
+      if (!isStaff(interaction.member)) {
+        return interaction.reply({ content: '❌ Apenas Gerência/Proprietário.', flags: 64 });
+      }
+      return safeShowModal(interaction, managementDayModal());
+    }
+
+if (interaction.isButton() && interaction.customId === 'mgmt_open_open') {
+      if (!isStaff(interaction.member)) {
+        return interaction.reply({ content: '❌ Apenas Gerência/Proprietário.', flags: 64 });
+      }
+      const row = await buildEmployeeSelectRow(interaction.guild, 'open');
+      if (!row) return interaction.reply({ content: '❌ Nenhum funcionário encontrado para consulta.', flags: 64 });
+      return interaction.reply({
+        content: 'Selecione o funcionário para consultar o que está em aberto:',
+        components: [row],
+        flags: 64
+      });
+    }
+
+if (interaction.isButton() && interaction.customId === 'mgmt_open_pay') {
+      if (!isStaff(interaction.member)) {
+        return interaction.reply({ content: '❌ Apenas Gerência/Proprietário.', flags: 64 });
+      }
+      const row = await buildEmployeeSelectRow(interaction.guild, 'pay');
+      if (!row) return interaction.reply({ content: '❌ Nenhum funcionário encontrado para pagamento.', flags: 64 });
+      return interaction.reply({
+        content: 'Selecione o funcionário para registrar pagamento:',
+        components: [row],
+        flags: 64
+      });
+    }
+
+if (interaction.isButton() && interaction.customId === 'mgmt_open_list') {
+      if (!isStaff(interaction.member)) {
+        return interaction.reply({ content: '❌ Apenas Gerência/Proprietário.', flags: 64 });
+      }
+      const row = await buildEmployeeSelectRow(interaction.guild, 'list');
+      if (!row) return interaction.reply({ content: '❌ Nenhum funcionário encontrado para listagem.', flags: 64 });
+      return interaction.reply({
+        content: 'Selecione o funcionário para listar registros:',
+        components: [row],
+        flags: 64
+      });
+    }
+
+if (interaction.isButton() && interaction.customId === 'mgmt_open_cancel') {
+      if (!isStaff(interaction.member)) {
+        return interaction.reply({ content: '❌ Apenas Gerência/Proprietário.', flags: 64 });
+      }
+      return safeShowModal(interaction, managementCancelModal());
+    }
+
+if (interaction.isStringSelectMenu() && interaction.customId.startsWith('mgmt_select_employee:')) {
+      if (!isStaff(interaction.member)) {
+        return interaction.reply({ content: '❌ Apenas Gerência/Proprietário.', flags: 64 });
+      }
+
+      const action = interaction.customId.split(':')[1];
+      const userId = interaction.values?.[0];
+      if (!userId) return interaction.reply({ content: '❌ Funcionário inválido.', flags: 64 });
+
+      if (action === 'period') {
+        return safeShowModal(interaction, managementPeriodModal(userId));
+      }
+
+      if (action === 'pay') {
+        return safeShowModal(interaction, managementPaymentModal(userId));
+      }
+
+      await safeDeferReply(interaction);
+
+      if (action === 'total') {
+        const totals = totalsByUser(interaction.guildId, userId, { onlyOpen: false });
+        const keys = Object.keys(totals);
+        const member = await interaction.guild.members.fetch(userId).catch(() => null);
+        const name = member ? (member.nickname || member.user.username || member.user.tag) : userId;
+
+        if (!keys.length) return interaction.editReply(`Sem registros para **${name}**.`);
+
+        const lines = keys.map(k => {
+          const label = getItem(k)?.label || k;
+          return `• **${label}**: ${totals[k]}`;
+        });
+
+        return interaction.editReply(`📦 **Totais de ${name} (geral):**\n${lines.join('\n')}`);
+      }
+
+      if (action === 'open') {
+        const calc = computePayment(interaction.guildId, userId);
+        const keys = Object.keys(calc.itemTotals);
+        const member = await interaction.guild.members.fetch(userId).catch(() => null);
+        const name = member ? (member.nickname || member.user.username || member.user.tag) : userId;
+
+        if (!keys.length) return interaction.editReply(`✅ **${name}** não tem nada em aberto.`);
+
+        const lines = keys.map(k => {
+          const label = getItem(k)?.label || k;
+          return `• **${label}**: ${calc.itemTotals[k]} → **${money(calc.itemMoney[k])}**`;
+        });
+
+        return interaction.editReply(
+          `💰 **Em aberto — ${name}**\n` +
+          `${lines.join('\n')}\n\n` +
+          `Total: **${money(calc.grand)}**`
+        );
+      }
+
+      if (action === 'list') {
+        let deposits = loadDeposits().filter(d => d.guildId === interaction.guildId && d.userId === userId);
+        deposits.sort((a, b) => {
+          const ta = new Date(a.createdAt || a.day || 0).getTime();
+          const tb = new Date(b.createdAt || b.day || 0).getTime();
+          return tb - ta;
+        });
+
+        const member = await interaction.guild.members.fetch(userId).catch(() => null);
+        const name = member ? (member.nickname || member.user.username || member.user.tag) : userId;
+
+        const slice = deposits.slice(0, 20);
+        if (!slice.length) return interaction.editReply(`Sem registros para **${name}**.`);
+
+        const lines = slice.map(d => {
+          const label = getItem(d.itemKey)?.label || d.itemKey;
+          const dt = d.day ? brDateFromYMD(d.day) : '—';
+          return `• **#${d.id}** | **${dt}** | **${label}** x **${d.qty}** | **${d.status}**`;
+        });
+
+        return interaction.editReply(
+          `📄 **Registros de ${name} (${slice.length}/${deposits.length})**\n\n${lines.join('\n')}`
+        );
+      }
+    }
+
+if (interaction.isModalSubmit() && interaction.customId.startsWith('mgmt_period_modal:')) {
+      if (!isStaff(interaction.member)) {
+        return interaction.reply({ content: '❌ Apenas Gerência/Proprietário.', flags: 64 });
+      }
+
+      await safeDeferReply(interaction);
+
+      const userId = interaction.customId.split(':')[1];
+      const startInput = interaction.fields.getTextInputValue('inicio').trim();
+      const endInput = interaction.fields.getTextInputValue('fim').trim();
+
+      const startYmd = parseBrDateToYMD(startInput);
+      const endYmd = parseBrDateToYMD(endInput);
+
+      if (!startYmd || !endYmd) {
+        return interaction.editReply('❌ Datas inválidas. Use o formato **dd/mm/aaaa**.');
+      }
+      if (startYmd > endYmd) {
+        return interaction.editReply('❌ A data inicial não pode ser maior que a final.');
+      }
+
+      const deposits = getUserPeriodDeposits(interaction.guildId, userId, startYmd, endYmd);
+      const member = await interaction.guild.members.fetch(userId).catch(() => null);
+      const name = member ? (member.nickname || member.user.username || member.user.tag) : userId;
+
+      if (!deposits.length) {
+        return interaction.editReply(`Sem registros para **${name}** no período **${formatPeriodLabel(startYmd, endYmd)}**.`);
+      }
+
+      const totals = summarizeDepositsByItem(deposits);
+      const lines = Object.keys(totals).map(k => {
+        const label = getItem(k)?.label || k;
+        return `• **${label}**: ${totals[k]}`;
+      });
+
+      return interaction.editReply(
+        `📊 **Farm do funcionário**\n` +
+        `• Funcionário: **${name}**\n` +
+        `• Período: **${formatPeriodLabel(startYmd, endYmd)}**\n` +
+        `• Registros encontrados: **${deposits.length}**\n\n` +
+        `${lines.join('\n')}`
+      );
+    }
+
+if (interaction.isModalSubmit() && interaction.customId === 'mgmt_day_modal') {
+      if (!isStaff(interaction.member)) {
+        return interaction.reply({ content: '❌ Apenas Gerência/Proprietário.', flags: 64 });
+      }
+
+      await safeDeferReply(interaction);
+      const input = interaction.fields.getTextInputValue('data').trim();
+      const day = parseBrDateToYMD(input);
+      if (!day) return interaction.editReply('❌ Data inválida. Use o formato **dd/mm/aaaa**.');
+
+      const map = totalsDay(interaction.guildId, day);
+      if (!map.size) return interaction.editReply(`Sem registros em **${input}**.`);
+
+      const lines = [];
+      for (const [key, totals] of map.entries()) {
+        const userId = key.split('|')[0];
+        const member = await interaction.guild.members.fetch(userId).catch(() => null);
+        const name = member ? (member.nickname || member.user.username || member.user.tag) : key.split('|')[1];
+        const items = Object.keys(totals).map(k => {
+          const label = getItem(k)?.label || k;
+          return `${label}: ${totals[k]}`;
+        }).join(', ');
+        lines.push(`• **${name}** — ${items}`);
+      }
+
+      return interaction.editReply(`📅 **Resumo — ${input}**\n${lines.join('\n')}`);
+    }
+
+if (interaction.isModalSubmit() && interaction.customId.startsWith('mgmt_pay_modal:')) {
+      if (!isStaff(interaction.member)) {
+        return interaction.reply({ content: '❌ Apenas Gerência/Proprietário.', flags: 64 });
+      }
+
+      await safeDeferReply(interaction);
+      const userId = interaction.customId.split(':')[1];
+      const rawValue = interaction.fields.getTextInputValue('valor').trim();
+      let overrideValue = null;
+      if (rawValue) {
+        const normalized = rawValue.replace(/\./g, '').replace(',', '.');
+        overrideValue = Number(normalized);
+        if (!Number.isFinite(overrideValue)) {
+          return interaction.editReply('❌ Valor inválido.');
+        }
+      }
+
+      const member = await interaction.guild.members.fetch(userId).catch(() => null);
+      const userTag = member?.user?.tag || userId;
+
+      const deposits = loadDeposits();
+      const open = deposits.filter(d =>
+        d.guildId === interaction.guildId &&
+        d.userId === userId &&
+        d.status === 'ABERTO' &&
+        d.status !== 'CANCELADO'
+      );
+
+      if (!open.length) return interaction.editReply(`✅ **${userTag}** não tem nada em aberto.`);
+
+      const calc = computePayment(interaction.guildId, userId);
+      const valueToPay = (typeof overrideValue === 'number') ? overrideValue : calc.grand;
+
+      const openDays = open.map(d => d.day).filter(Boolean).sort();
+      const periodStart = openDays[0] || ymd();
+      const periodEnd = ymd();
+
+      const payId = `pay_${Date.now()}_${Math.floor(Math.random() * 9999)}`;
+      for (const d of deposits) {
+        if (d.guildId === interaction.guildId && d.userId === userId && d.status === 'ABERTO') {
+          d.status = 'PAGO';
+          d.paymentId = payId;
+          d.paidAt = nowIso();
+          d.paidBy = interaction.user.tag;
+        }
+      }
+      saveDeposits(deposits);
+
+      const payments = loadPayments();
+      payments.push({
+        guildId: interaction.guildId,
+        paymentId: payId,
+        userId,
+        userTag,
+        paidValue: Number(valueToPay),
+        calculatedValue: Number(calc.grand),
+        periodStart,
+        periodEnd,
+        paidAt: nowIso(),
+        paidBy: interaction.user.tag
+      });
+      savePayments(payments);
+
+      await sendPaymentLog(interaction,
+        `💰 **Pagamento registrado**\n` +
+        `• Funcionário: **${userTag}**\n` +
+        `• Período: **${brDateFromYMD(periodStart)}** até **${brDateFromYMD(periodEnd)}**\n` +
+        `• Valor calculado: **${money(calc.grand)}**\n` +
+        `• Valor registrado: **${money(valueToPay)}**\n` +
+        `• Pago por: **${interaction.user.tag}**\n` +
+        `• Data: **${periodEnd}**\n` +
+        `• paymentId: **${payId}**`
+      );
+
+      return interaction.editReply(
+        `✅ Pago registrado para **${userTag}**.\n` +
+        `Total: **${money(calc.grand)}** | Registrado: **${money(valueToPay)}**\n` +
+        `paymentId: **${payId}**`
+      );
+    }
+
+if (interaction.isModalSubmit() && interaction.customId === 'mgmt_cancel_modal') {
+      if (!isStaff(interaction.member)) {
+        return interaction.reply({ content: '❌ Apenas Gerência/Proprietário.', flags: 64 });
+      }
+
+      await safeDeferReply(interaction);
+
+      const id = Number(interaction.fields.getTextInputValue('id').trim());
+      const motivo = interaction.fields.getTextInputValue('motivo').trim();
+
+      if (!Number.isInteger(id) || id <= 0) return interaction.editReply('❌ ID inválido.');
+      if (!motivo) return interaction.editReply('❌ Informe o motivo do cancelamento.');
+
+      const deposits = loadDeposits();
+      const target = deposits.find(d => d.guildId === interaction.guildId && d.id === id);
+
+      if (!target) return interaction.editReply('❌ Registro não encontrado.');
+      if (target.status === 'CANCELADO') return interaction.editReply('⚠️ Esse registro já está cancelado.');
+
+      target.status = 'CANCELADO';
+      target.canceledAt = nowIso();
+      target.canceledBy = interaction.user.tag;
+      target.cancelReason = motivo;
+      saveDeposits(deposits);
+
+      await sendDepositLog(interaction,
+        `🗑️ **Registro cancelado**\n` +
+        `• ID: **${id}**\n` +
+        `• Funcionário: **${target.userTag}**\n` +
+        `• Item: **${getItem(target.itemKey)?.label || target.itemKey}**\n` +
+        `• Quantidade: **${target.qty}**\n` +
+        `• Cancelado por: **${interaction.user.tag}**\n` +
+        `• Motivo: **${motivo}**\n` +
+        `• Prova: ${target.proofUrl}`
+      );
+
+      return interaction.editReply(`✅ Registro **${id}** cancelado.`);
+    }
+
+
 if (interaction.isModalSubmit() && interaction.customId === 'absence_modal_submit') {
   await safeDeferReply(interaction);
 
