@@ -12,7 +12,8 @@ const {
   AttachmentBuilder,
   ButtonBuilder,
   ButtonStyle,
-  EmbedBuilder
+  EmbedBuilder,
+  MessageType
 } = require('discord.js');
 
 const { stringify } = require('csv-stringify/sync');
@@ -387,19 +388,7 @@ async function findFarmThreadByUser(guild, user) {
   const hub = await guild.channels.fetch(hubId).catch(() => null);
   if (!hub) return null;
 
-  const threadName = `${cfg.threads?.namePrefix || 'farm-'}${user.username}`.toLowerCase();
-
-  // tenta ativo
-  const active = await hub.threads.fetchActive().catch(() => null);
-  const existingActive = active?.threads?.find(t => t.name === threadName);
-  if (existingActive) return existingActive;
-
-  // tenta arquivadas recentes
-  const archived = await hub.threads.fetchArchived({ limit: 100 }).catch(() => null);
-  const existingArchived = archived?.threads?.find(t => t.name === threadName);
-  if (existingArchived) return existingArchived;
-
-  return null;
+  return findExistingFarmThread(hub, user);
 }
 
 // =====================
