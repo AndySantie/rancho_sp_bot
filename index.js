@@ -110,6 +110,22 @@ function brDateFromYMD(s) {
   return `${d}/${m}/${y}`;
 }
 
+function brDateTimeFromIso(iso) {
+  const d = iso ? new Date(iso) : new Date();
+  if (Number.isNaN(d.getTime())) return 'Data inválida';
+
+  const dd = String(d.getDate()).padStart(2, '0');
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const yyyy = d.getFullYear();
+
+  const hh = String(d.getHours()).padStart(2, '0');
+  const min = String(d.getMinutes()).padStart(2, '0');
+  const ss = String(d.getSeconds()).padStart(2, '0');
+
+  return `${dd}/${mm}/${yyyy} às ${hh}:${min}:${ss}`;
+}
+
+
 function safeNick(str) {
   return String(str || '').slice(0, 32);
 }
@@ -371,7 +387,7 @@ function farmThreadButtonsRow() {
     new ButtonBuilder()
       .setCustomId('farm_show_total')
       .setLabel('Meu Total')
-      .setStyle(ButtonStyle.Secondary)
+      .setStyle(ButtonStyle.Primary)
   );
 }
 
@@ -2434,7 +2450,7 @@ if (interaction.isButton()) {
           `• Funcionário: **${rec.userTag}**\n` +
           `• Item: **${getItem(rec.itemKey)?.label || rec.itemKey}**\n` +
           `• Quantidade: **${rec.qty}**\n` +
-          `• Data: **${rec.day}**\n` +
+          `• Registrado em: **${brDateTimeFromIso(rec.createdAt)}**\n` +
           `• Prova: ${rec.proofUrl}`
         );
 
@@ -2445,7 +2461,7 @@ if (interaction.isButton()) {
             `• ID: **${rec.id}**\n` +
             `• Item: **${getItem(rec.itemKey)?.label || rec.itemKey}**\n` +
             `• Quantidade: **${rec.qty}**\n` +
-            `• Data: **${rec.day}**`
+            `• Registrado em: **${brDateTimeFromIso(rec.createdAt)}**`
           ).catch(() => null);
           await ensureFarmThreadStarterMessage(threadChannel).catch(() => null);
         }
