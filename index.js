@@ -348,9 +348,12 @@ function getFarmThreadName(user) {
 
 function farmThreadMessageText() {
   return (
-    'Clique no botão abaixo para registrar seu farm, preencha o formulário com as informações corretas e anexe o print do seu farm.\n\n' +
-    '📸 Sempre anexe um print antes de registrar.\n\n' +
-    `⏱️ Print válido por **${cfg.proof?.maxMinutesSinceProof ?? 5} minutos**.`
+    'Anexe o print do seu farm e depois clique em **Registrar este Farm** no botão que aparecer logo abaixo do print.\n\n' +
+    'Escolha o material na lista e informe a quantidade.\n\n' +
+    '📸 **DICAS**\n' +
+    '• Sempre anexe o print antes de clicar em Registrar este Farm\n' +
+    `• Print válido por **${cfg.proof?.maxMinutesSinceProof ?? 5} minutos**\n` +
+    '• Em caso de dúvida, procure um gerente'
   );
 }
 
@@ -366,13 +369,18 @@ function farmCreateButtonRow() {
 function farmThreadButtonsRow() {
   return new ActionRowBuilder().addComponents(
     new ButtonBuilder()
-      .setCustomId('farm_open_register')
-      .setLabel('Registrar Farm')
-      .setStyle(ButtonStyle.Success),
-    new ButtonBuilder()
       .setCustomId('farm_show_total')
       .setLabel('Meu Total')
       .setStyle(ButtonStyle.Secondary)
+  );
+}
+
+function farmProofButtonRow(proofMessageId) {
+  return new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId(`farm_register_from_proof:${proofMessageId}`)
+      .setLabel('Registrar este Farm')
+      .setStyle(ButtonStyle.Success)
   );
 }
 
@@ -394,7 +402,7 @@ async function ensureFarmThreadStarterMessage(thread) {
   const msgs = await thread.messages.fetch({ limit: 20 }).catch(() => null);
   const existing = msgs?.find?.(m =>
     m.author?.id === client.user?.id &&
-    m.components?.some?.(row => row.components?.some?.(c => c.customId === 'farm_open_register' || c.customId === 'farm_show_total'))
+    m.components?.some?.(row => row.components?.some?.(c => c.customId === 'farm_show_total'))
   );
 
   if (existing) {
@@ -455,6 +463,21 @@ async function getLatestProofMessage(thread, userId, maxMinutes) {
     .first();
 
   if (!proof) return null;
+
+  const att = proof.attachments.first();
+  if (!att) return null;
+
+  return { id: proof.id, url: att.url };
+}
+
+async function getProofMessageById(thread, userId, messageId, maxMinutes) {
+  const proof = await thread.messages.fetch(messageId).catch(() => null);
+  if (!proof) return null;
+  if (proof.author?.id !== userId) return null;
+  if (!proof.attachments?.size) return null;
+
+  const maxMs = maxMinutes * 60 * 1000;
+  if ((Date.now() - proof.createdTimestamp) > maxMs) return null;
 
   const att = proof.attachments.first();
   if (!att) return null;
@@ -1204,6 +1227,38 @@ async function sendWelcome(member) {
   }).catch(() => {});
 }
 
+client.on(Events.MessageCreate, async (message) => {
+  try {
+    if (!message.guild || !message.channel || message.author?.bot) return;
+    if (!message.attachments?.size) return;
+
+    const hubId = cfg.channels?.farmHubChannelId;
+    if (!hubId) return;
+
+    const thread = message.channel;
+    if (!thread.isThread?.()) return;
+    if (thread.parentId !== hubId) return;
+    if (thread.name !== getFarmThreadName(message.author)) return;
+
+    const alreadyPrompted = (await thread.messages.fetch({ limit: 20 }).catch(() => null))?.some?.(m =>
+      m.author?.id === client.user?.id &&
+      m.reference?.messageId === message.id &&
+      m.components?.some?.(row => row.components?.some?.(c => c.customId === `farm_register_from_proof:${message.id}`))
+    );
+
+    if (alreadyPrompted) return;
+
+    await message.reply({
+      content:
+        'Print detectado. Quando estiver pronto, clique no botão abaixo para registrar **este print**.',
+      components: [farmProofButtonRow(message.id)],
+      allowedMentions: { repliedUser: false }
+    }).catch(() => null);
+  } catch (e) {
+    console.error('❌ Erro ao processar print de farm:', e);
+  }
+});
+
 // =====================
 // READY
 // =====================
@@ -1288,6 +1343,45 @@ if (interaction.isButton() && interaction.customId === 'farm_create_thread') {
       await safeDeferReply(interaction);
       const thread = await getOrCreatePrivateThread(interaction);
       return interaction.editReply(`✅ Sua pasta: ${thread.toString()}`);
+    }
+
+if (interaction.isButton() && interaction.customId.startsWith('farm_register_from_proof:')) {
+      await safeDeferReply(interaction);
+
+      const proofMessageId = interaction.customId.split(':')[1];
+      const thread = await getOrCreatePrivateThread(interaction);
+
+      if (interaction.channelId !== thread.id) {
+        return interaction.editReply(`⚠️ Use o botão dentro da sua pasta: ${thread.toString()}`);
+      }
+
+      const proofMsg = await getProofMessageById(
+        thread,
+        interaction.user.id,
+        proofMessageId,
+        cfg.proof?.maxMinutesSinceProof ?? 5
+      );
+
+      if (!proofMsg) {
+        return interaction.editReply(`📸 Esse print não é válido. Envie um print novo e clique no botão abaixo dele.`);
+      }
+
+      if (isProofUsed(interaction.guildId, proofMsg.id)) {
+        return interaction.editReply('⚠️ Esse print já foi usado. Envie um print novo e clique no botão abaixo dele.');
+      }
+
+      session.set(interaction.user.id, {
+        threadId: thread.id,
+        proofUrl: proofMsg.url,
+        proofMessageId: proofMsg.id,
+        itemKey: null,
+        qty: null
+      });
+
+      return interaction.editReply({
+        content: `Selecione o material que você está registrando para este print.\n✅ Print selecionado: ${proofMsg.url}`,
+        components: [itemsMenu()]
+      });
     }
 
 if (interaction.isButton() && interaction.customId === 'farm_open_register') {
