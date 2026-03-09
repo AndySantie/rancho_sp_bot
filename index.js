@@ -111,6 +111,33 @@ function brDateFromYMD(s) {
   return `${d}/${m}/${y}`;
 }
 
+function parseBrDateToYMD(s) {
+  if (!s || typeof s !== 'string') return null;
+  const m = s.trim().match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+  if (!m) return null;
+  const [, dd, mm, yyyy] = m;
+  const d = new Date(`${yyyy}-${mm}-${dd}T00:00:00`);
+  if (Number.isNaN(d.getTime())) return null;
+  if (String(d.getDate()).padStart(2, '0') != dd || String(d.getMonth() + 1).padStart(2, '0') != mm || String(d.getFullYear()) != yyyy) return null;
+  return `${yyyy}-${mm}-${dd}`;
+}
+
+function formatPeriodLabel(startYmd, endYmd) {
+  return `${brDateFromYMD(startYmd)} até ${brDateFromYMD(endYmd)}`;
+}
+
+function brDateTimeFromIso(iso) {
+  const d = iso ? new Date(iso) : new Date();
+  if (Number.isNaN(d.getTime())) return 'Data inválida';
+  const dd = String(d.getDate()).padStart(2, '0');
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const yyyy = d.getFullYear();
+  const hh = String(d.getHours()).padStart(2, '0');
+  const min = String(d.getMinutes()).padStart(2, '0');
+  const ss = String(d.getSeconds()).padStart(2, '0');
+  return `${dd}/${mm}/${yyyy} às ${hh}:${min}:${ss}`;
+}
+
 function safeNick(str) {
   return String(str || '').slice(0, 32);
 }
@@ -150,6 +177,27 @@ async function safeDeferReply(interaction) {
     // 10062 = Unknown interaction (expirou / já respondida)
     if (e?.code === 10062) return;
     console.error('❌ Erro ao deferReply:', e);
+    throw e;
+  }
+}
+
+async function editReplyAndAutoDelete(interaction, content, ms = 15000) {
+  try {
+    if (interaction.deferred || interaction.replied) {
+      const msg = await interaction.editReply({ content, components: [], embeds: [], files: [] }).catch(() => null);
+      if (msg && typeof msg.delete === 'function') {
+        setTimeout(() => msg.delete().catch(() => null), ms);
+      }
+      return msg;
+    }
+    const msg = await interaction.reply({ content, flags: 64, fetchReply: true }).catch(() => null);
+    if (msg && typeof msg.delete === 'function') {
+      setTimeout(() => msg.delete().catch(() => null), ms);
+    }
+    return msg;
+  } catch (e) {
+    if (e?.code === 10062) return;
+    console.error('❌ Erro ao responder e auto-apagar:', e);
     throw e;
   }
 }
@@ -284,6 +332,22 @@ async function sendPaymentLog(interaction, text) {
   await logCh.send(`${text}\n${SEP}`);
 }
 
+
+async function ensureStaffCanSeeFarmThread(thread, guild) {
+  const roleIds = [cfg.roles?.ownerRoleId, cfg.roles?.managerRoleId].filter(Boolean);
+  if (!roleIds.length) return;
+
+  await guild.members.fetch().catch(() => null);
+
+  const staffMembers = guild.members.cache.filter(member =>
+    roleIds.some(roleId => member.roles.cache.has(roleId))
+  );
+
+  for (const member of staffMembers.values()) {
+    await thread.members.add(member.id).catch(() => null);
+  }
+}
+
 // =====================
 // THREADS (FARM)
 // =====================
@@ -293,9 +357,12 @@ function getFarmThreadName(user) {
 
 function farmThreadMessageText() {
   return (
-    'Clique no botão abaixo para registrar seu farm, preencha o formulário com as informações corretas e anexe o print do seu farm.\n\n' +
-    '📸 Sempre anexe um print antes de registrar.\n\n' +
-    `⏱️ Print válido por **${cfg.proof?.maxMinutesSinceProof ?? 5} minutos**.`
+    'Anexe o print do seu farm e depois clique em **Registrar este Farm** no botão que aparecer logo abaixo do print.\n\n' +
+    'Escolha o material na lista e informe a quantidade.\n\n' +
+    '📸 **DICAS**\n' +
+    '• Sempre anexe o print antes de clicar em Registrar este Farm\n' +
+    `• Print válido por **${cfg.proof?.maxMinutesSinceProof ?? 5} minutos**\n` +
+    '• Em caso de dúvida, procure um gerente'
   );
 }
 
@@ -317,7 +384,7 @@ function farmThreadButtonsRow() {
     new ButtonBuilder()
       .setCustomId('farm_show_total')
       .setLabel('Meu Total')
-      .setStyle(ButtonStyle.Secondary)
+      .setStyle(ButtonStyle.Primary)
   );
 }
 
