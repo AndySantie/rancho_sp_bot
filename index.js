@@ -153,6 +153,27 @@ async function safeDeferReply(interaction) {
   }
 }
 
+async function editReplyAndAutoDelete(interaction, content, ms = 15000) {
+  try {
+    if (interaction.deferred || interaction.replied) {
+      const msg = await interaction.editReply({ content, components: [], embeds: [], files: [] }).catch(() => null);
+      if (msg && typeof msg.delete === 'function') {
+        setTimeout(() => msg.delete().catch(() => null), ms);
+      }
+      return msg;
+    }
+    const msg = await interaction.reply({ content, flags: 64, fetchReply: true }).catch(() => null);
+    if (msg && typeof msg.delete === 'function') {
+      setTimeout(() => msg.delete().catch(() => null), ms);
+    }
+    return msg;
+  } catch (e) {
+    if (e?.code === 10062) return;
+    console.error('❌ Erro ao responder e auto-apagar:', e);
+    throw e;
+  }
+}
+
 // =====================
 // DATA ACCESS
 // =====================
@@ -281,6 +302,41 @@ async function sendPaymentLog(interaction, text) {
   const logCh = await interaction.guild.channels.fetch(payChId).catch(() => null);
   if (!logCh) return;
   await logCh.send(`${text}\n${SEP}`);
+}
+
+
+async function ensureStaffCanSeeFarmThread(thread, guild) {
+  const roleIds = [cfg.roles?.ownerRoleId, cfg.roles?.managerRoleId].filter(Boolean);
+  if (!roleIds.length) return;
+
+  await guild.members.fetch().catch(() => null);
+
+  const staffMembers = guild.members.cache.filter(member =>
+    roleIds.some(roleId => member.roles.cache.has(roleId))
+  );
+
+  for (const member of staffMembers.values()) {
+    await thread.members.add(member.id).catch(() => null);
+  }
+}
+
+async function syncAllFarmThreadsVisibility(guild) {
+  const hubId = cfg.channels?.farmHubChannelId;
+  if (!hubId) return;
+
+  const hub = await guild.channels.fetch(hubId).catch(() => null);
+  if (!hub) return;
+
+  const active = await hub.threads.fetchActive().catch(() => null);
+  for (const thread of active?.threads?.values?.() || []) {
+    await ensureStaffCanSeeFarmThread(thread, guild);
+    await ensureFarmThreadStarterMessage(thread).catch(() => null);
+  }
+
+  const archived = await hub.threads.fetchArchived({ limit: 100 }).catch(() => null);
+  for (const thread of archived?.threads?.values?.() || []) {
+    await ensureStaffCanSeeFarmThread(thread, guild);
+  }
 }
 
 // =====================
@@ -1158,6 +1214,13 @@ client.once(Events.ClientReady, async () => {
   await ensureCommandsPanel();
   await ensureSuppliersPanel();
   await ensureAbsencePanel();
+
+  for (const guild of client.guilds.cache.values()) {
+    await syncAllFarmThreadsVisibility(guild).catch((e) => {
+      console.error('❌ Erro ao sincronizar permissões das pastas FARM:', e);
+    });
+  }
+
   startRankingScheduler();
 });
 
