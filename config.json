@@ -2,6 +2,7 @@
   "token": "seu token aqui",
   "clientId": "1477305670494851314",
   "guildId": "1477302414062256240",
+
   "roles": {
     "ownerRoleId": "1477303357696643243",
     "managerRoleId": "1477303573678391316",
@@ -9,12 +10,17 @@
     "sponsorRoleId": "1480185028716662924",
     "participantRoleId": "1480185268320473270"
   },
+
   "channels": {
     "farmHubChannelId": "1477305326507266150",
+    "registrosFarmChannelId": "1477305326507266150",
+
     "logChannelId": "1477305272857792542",
     "logPaymentsChannelId": "1477338749934506087",
     "rankingChannelId": "1477352414469165228",
+
     "visitorChatChannelId": "1480200459720331416",
+
     "eventCategoryId": "1480159674102972447",
     "eventChatChannelId": "1480161664845348907",
     "eventSponsorChannelId": "1480162045683962067",
@@ -22,112 +28,117 @@
     "eventRegistrationChannelId": "1480184927592124416",
     "eventSponsorVoiceChannelId": "1480162926168899687",
     "eventParticipantVoiceChannelId": "1480185924045508689",
+
     "ausenciaChannelId": "1480266170048315393"
   },
+
   "items": [
     {
       "key": "espinafre",
       "label": "Espinafre",
-      "price": 0.00
+      "price": 0.0
     },
     {
       "key": "hortela",
       "label": "Hortelã",
-      "price": 0.00
+      "price": 0.0
     },
     {
       "key": "alcool_industrial",
       "label": "Álcool Industrial",
-      "price": 0.00
+      "price": 0.0
     },
     {
       "key": "seringa_vidro",
       "label": "Seringa de Vidro",
-      "price": 0.00
+      "price": 0.0
     },
     {
       "key": "ripa_madeira",
       "label": "Ripa de Madeira",
-      "price": 0.00
+      "price": 0.0
     },
     {
       "key": "fibra",
       "label": "Fibra",
-      "price": 0.00
+      "price": 0.0
     },
     {
       "key": "cola",
       "label": "Cola",
-      "price": 0.00
+      "price": 0.0
     },
     {
       "key": "ginseng_alasca",
       "label": "Ginseng do Alasca",
-      "price": 0.00
+      "price": 0.0
     },
     {
       "key": "galho_arvore",
       "label": "Galho de Arvóre",
-      "price": 0.00
+      "price": 0.0
     },
     {
       "key": "madeira_bruta",
       "label": "Madeira Bruta",
-      "price": 0.00
+      "price": 0.0
     },
     {
       "key": "casca_arvore",
       "label": "Casac de Arvóre",
-      "price": 0.00
+      "price": 0.0
     },
     {
       "key": "cana_acucar",
       "label": "Cana de Açucar",
-      "price": 0.00
+      "price": 0.0
     },
     {
       "key": "maca",
       "label": "Maça",
-      "price": 0.00
+      "price": 0.0
     },
     {
       "key": "milho",
       "label": "Milho",
-      "price": 0.00
+      "price": 0.0
     },
     {
       "key": "laranja",
       "label": "Laranja",
-      "price": 0.00
+      "price": 0.0
     },
     {
       "key": "limao",
       "label": "Limão",
-      "price": 0.00
+      "price": 0.0
     },
     {
       "key": "feijao",
       "label": "Feijão",
-      "price": 0.00
+      "price": 0.0
     },
     {
       "key": "seiva",
       "label": "Seiva",
-      "price": 0.00
+      "price": 0.0
     },
     {
       "key": "millefaliun",
       "label": "Millefaliun",
-      "price": 0.00
+      "price": 0.0
     }
   ],
+
   "proof": {
     "maxMinutesSinceProof": 5
   },
+
   "threads": {
     "namePrefix": "farm-",
     "autoArchiveMinutes": 10080
   },
+
   "ranking": {
     "updateMinutes": 10,
     "topLimit": 10
