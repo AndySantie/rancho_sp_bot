@@ -5,7 +5,6 @@ const {
   ChannelType,
   ActionRowBuilder,
   StringSelectMenuBuilder,
-  UserSelectMenuBuilder,
   ModalBuilder,
   TextInputBuilder,
   TextInputStyle,
@@ -111,6 +110,21 @@ function brDateFromYMD(s) {
   return `${d}/${m}/${y}`;
 }
 
+function brDateTimeFromIso(iso) {
+  const d = iso ? new Date(iso) : new Date();
+  if (Number.isNaN(d.getTime())) return 'Data inválida';
+
+  const dd = String(d.getDate()).padStart(2, '0');
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const yyyy = d.getFullYear();
+
+  const hh = String(d.getHours()).padStart(2, '0');
+  const min = String(d.getMinutes()).padStart(2, '0');
+  const ss = String(d.getSeconds()).padStart(2, '0');
+
+  return `${dd}/${mm}/${yyyy} às ${hh}:${min}:${ss}`;
+}
+
 function parseBrDateToYMD(s) {
   if (!s || typeof s !== 'string') return null;
   const m = s.trim().match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
@@ -118,7 +132,7 @@ function parseBrDateToYMD(s) {
   const [, dd, mm, yyyy] = m;
   const d = new Date(`${yyyy}-${mm}-${dd}T00:00:00`);
   if (Number.isNaN(d.getTime())) return null;
-  if (String(d.getDate()).padStart(2, '0') != dd || String(d.getMonth() + 1).padStart(2, '0') != mm || String(d.getFullYear()) != yyyy) return null;
+  if (String(d.getDate()).padStart(2, '0') !== dd || String(d.getMonth() + 1).padStart(2, '0') !== mm || String(d.getFullYear()) !== yyyy) return null;
   return `${yyyy}-${mm}-${dd}`;
 }
 
@@ -126,17 +140,6 @@ function formatPeriodLabel(startYmd, endYmd) {
   return `${brDateFromYMD(startYmd)} até ${brDateFromYMD(endYmd)}`;
 }
 
-function brDateTimeFromIso(iso) {
-  const d = iso ? new Date(iso) : new Date();
-  if (Number.isNaN(d.getTime())) return 'Data inválida';
-  const dd = String(d.getDate()).padStart(2, '0');
-  const mm = String(d.getMonth() + 1).padStart(2, '0');
-  const yyyy = d.getFullYear();
-  const hh = String(d.getHours()).padStart(2, '0');
-  const min = String(d.getMinutes()).padStart(2, '0');
-  const ss = String(d.getSeconds()).padStart(2, '0');
-  return `${dd}/${mm}/${yyyy} às ${hh}:${min}:${ss}`;
-}
 
 function safeNick(str) {
   return String(str || '').slice(0, 32);
@@ -348,6 +351,25 @@ async function ensureStaffCanSeeFarmThread(thread, guild) {
   }
 }
 
+async function syncAllFarmThreadsVisibility(guild) {
+  const hubId = cfg.channels?.farmHubChannelId;
+  if (!hubId) return;
+
+  const hub = await guild.channels.fetch(hubId).catch(() => null);
+  if (!hub) return;
+
+  const active = await hub.threads.fetchActive().catch(() => null);
+  for (const thread of active?.threads?.values?.() || []) {
+    await ensureStaffCanSeeFarmThread(thread, guild);
+    await ensureFarmThreadStarterMessage(thread).catch(() => null);
+  }
+
+  const archived = await hub.threads.fetchArchived({ limit: 100 }).catch(() => null);
+  for (const thread of archived?.threads?.values?.() || []) {
+    await ensureStaffCanSeeFarmThread(thread, guild);
+  }
+}
+
 // =====================
 // THREADS (FARM)
 // =====================
@@ -378,13 +400,18 @@ function farmCreateButtonRow() {
 function farmThreadButtonsRow() {
   return new ActionRowBuilder().addComponents(
     new ButtonBuilder()
-      .setCustomId('farm_open_register')
-      .setLabel('Registrar Farm')
-      .setStyle(ButtonStyle.Success),
-    new ButtonBuilder()
       .setCustomId('farm_show_total')
       .setLabel('Meu Total')
       .setStyle(ButtonStyle.Primary)
+  );
+}
+
+function farmProofButtonRow(proofMessageId) {
+  return new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId(`farm_register_from_proof:${proofMessageId}`)
+      .setLabel('Registrar este Farm')
+      .setStyle(ButtonStyle.Success)
   );
 }
 
@@ -406,7 +433,7 @@ async function ensureFarmThreadStarterMessage(thread) {
   const msgs = await thread.messages.fetch({ limit: 20 }).catch(() => null);
   const existing = msgs?.find?.(m =>
     m.author?.id === client.user?.id &&
-    m.components?.some?.(row => row.components?.some?.(c => c.customId === 'farm_open_register' || c.customId === 'farm_show_total'))
+    m.components?.some?.(row => row.components?.some?.(c => c.customId === 'farm_show_total'))
   );
 
   if (existing) {
@@ -467,6 +494,21 @@ async function getLatestProofMessage(thread, userId, maxMinutes) {
     .first();
 
   if (!proof) return null;
+
+  const att = proof.attachments.first();
+  if (!att) return null;
+
+  return { id: proof.id, url: att.url };
+}
+
+async function getProofMessageById(thread, userId, messageId, maxMinutes) {
+  const proof = await thread.messages.fetch(messageId).catch(() => null);
+  if (!proof) return null;
+  if (proof.author?.id !== userId) return null;
+  if (!proof.attachments?.size) return null;
+
+  const maxMs = maxMinutes * 60 * 1000;
+  if ((Date.now() - proof.createdTimestamp) > maxMs) return null;
 
   const att = proof.attachments.first();
   if (!att) return null;
@@ -787,28 +829,51 @@ async function ensureManagementPanel() {
 }
 
 async function buildEmployeeSelectRow(guild, action) {
-  const employeeRoleId = cfg.roles?.employeeRoleId;
   await guild.members.fetch().catch(() => null);
 
-  let members = guild.members.cache.filter(m => !m.user?.bot);
-  if (employeeRoleId) {
-    members = members.filter(m => m.roles.cache.has(employeeRoleId));
+  const deposits = validDeposits(loadDeposits()).filter(d => d.guildId === guild.id);
+  const uniqueIds = [...new Set(deposits.map(d => d.userId).filter(Boolean))];
+
+  let users = [];
+  for (const userId of uniqueIds) {
+    const member = guild.members.cache.get(userId) || await guild.members.fetch(userId).catch(() => null);
+    if (!member || member.user?.bot) continue;
+    const userTag = deposits.find(d => d.userId === userId)?.userTag || member.user.tag;
+    users.push({
+      id: userId,
+      label: (member.nickname || member.user.username || userTag).slice(0, 100),
+      description: String(userTag).slice(0, 100)
+    });
   }
 
-  const options = members
-    .sort((a, b) => {
-      const an = (a.nickname || a.user.username || '').toLowerCase();
-      const bn = (b.nickname || b.user.username || '').toLowerCase();
-      return an.localeCompare(bn, 'pt-BR');
-    })
-    .first(25)
-    .map(m => ({
-      label: (m.nickname || m.user.username).slice(0, 100),
-      value: m.id,
-      description: m.user.tag.slice(0, 100)
-    }));
+  users.sort((a, b) => a.label.toLowerCase().localeCompare(b.label.toLowerCase(), 'pt-BR'));
 
-  if (!options.length) return null;
+  const options = users.slice(0, 25).map(u => ({
+    label: u.label,
+    value: u.id,
+    description: u.description
+  }));
+
+  if (!options.length) {
+    const employeeRoleId = cfg.roles?.employeeRoleId;
+    let members = guild.members.cache.filter(m => !m.user?.bot);
+    if (employeeRoleId) members = members.filter(m => m.roles.cache.has(employeeRoleId));
+    const fallback = members
+      .sort((a, b) => (a.nickname || a.user.username || '').toLowerCase().localeCompare((b.nickname || b.user.username || '').toLowerCase(), 'pt-BR'))
+      .first(25)
+      .map(m => ({
+        label: (m.nickname || m.user.username).slice(0, 100),
+        value: m.id,
+        description: m.user.tag.slice(0, 100)
+      }));
+    if (!fallback.length) return null;
+    return new ActionRowBuilder().addComponents(
+      new StringSelectMenuBuilder()
+        .setCustomId(`mgmt_select_employee:${action}`)
+        .setPlaceholder('Selecione o funcionário...')
+        .addOptions(fallback)
+    );
+  }
 
   return new ActionRowBuilder().addComponents(
     new StringSelectMenuBuilder()
@@ -916,6 +981,7 @@ function summarizeDepositsByItem(deposits) {
   for (const d of deposits) map[d.itemKey] = (map[d.itemKey] || 0) + d.qty;
   return map;
 }
+
 async function ensureSuppliersPanel() {
   const text =
     '📌 **CADASTRO DE FORNECEDORES**\n' +
@@ -1380,6 +1446,38 @@ async function sendWelcome(member) {
   }).catch(() => {});
 }
 
+client.on(Events.MessageCreate, async (message) => {
+  try {
+    if (!message.guild || !message.channel || message.author?.bot) return;
+    if (!message.attachments?.size) return;
+
+    const hubId = cfg.channels?.farmHubChannelId;
+    if (!hubId) return;
+
+    const thread = message.channel;
+    if (!thread.isThread?.()) return;
+    if (thread.parentId !== hubId) return;
+    if (thread.name !== getFarmThreadName(message.author)) return;
+
+    const alreadyPrompted = (await thread.messages.fetch({ limit: 20 }).catch(() => null))?.some?.(m =>
+      m.author?.id === client.user?.id &&
+      m.reference?.messageId === message.id &&
+      m.components?.some?.(row => row.components?.some?.(c => c.customId === `farm_register_from_proof:${message.id}`))
+    );
+
+    if (alreadyPrompted) return;
+
+    await message.reply({
+      content:
+        'Print detectado. Quando estiver pronto, clique no botão abaixo para registrar **este print**.',
+      components: [farmProofButtonRow(message.id)],
+      allowedMentions: { repliedUser: false }
+    }).catch(() => null);
+  } catch (e) {
+    console.error('❌ Erro ao processar print de farm:', e);
+  }
+});
+
 // =====================
 // READY
 // =====================
@@ -1391,6 +1489,13 @@ client.once(Events.ClientReady, async () => {
   await ensureSuppliersPanel();
   await ensureAbsencePanel();
   await ensureManagementPanel();
+
+  for (const guild of client.guilds.cache.values()) {
+    await syncAllFarmThreadsVisibility(guild).catch((e) => {
+      console.error('❌ Erro ao sincronizar permissões das pastas FARM:', e);
+    });
+  }
+
   startRankingScheduler();
 });
 
@@ -1454,106 +1559,49 @@ if (interaction.isButton() && interaction.customId === 'register_participant_ope
       return safeShowModal(interaction, registerParticipantModal());
     }
 
-if (interaction.isButton() && interaction.customId === 'mgmt_open_period') {
-  if (!isStaff(interaction.member)) return interaction.reply({ content: '❌ Apenas Gerência/Proprietário.', flags: 64 });
-  await safeDeferReply(interaction);
-  const row = await buildEmployeeSelectRow(interaction.guild, 'period');
-  if (!row) return interaction.editReply('❌ Não encontrei funcionários para listar.');
-  return interaction.editReply({ content: 'Selecione o funcionário para consultar o período.', components: [row] });
-}
-
-if (interaction.isButton() && interaction.customId === 'mgmt_open_total') {
-  if (!isStaff(interaction.member)) return interaction.reply({ content: '❌ Apenas Gerência/Proprietário.', flags: 64 });
-  await safeDeferReply(interaction);
-  const row = await buildEmployeeSelectRow(interaction.guild, 'total');
-  if (!row) return interaction.editReply('❌ Não encontrei funcionários para listar.');
-  return interaction.editReply({ content: 'Selecione o funcionário para ver o total geral.', components: [row] });
-}
-
-if (interaction.isButton() && interaction.customId === 'mgmt_open_open') {
-  if (!isStaff(interaction.member)) return interaction.reply({ content: '❌ Apenas Gerência/Proprietário.', flags: 64 });
-  await safeDeferReply(interaction);
-  const row = await buildEmployeeSelectRow(interaction.guild, 'open');
-  if (!row) return interaction.editReply('❌ Não encontrei funcionários para listar.');
-  return interaction.editReply({ content: 'Selecione o funcionário para consultar o que está em aberto.', components: [row] });
-}
-
-if (interaction.isButton() && interaction.customId === 'mgmt_open_pay') {
-  if (!isStaff(interaction.member)) return interaction.reply({ content: '❌ Apenas Gerência/Proprietário.', flags: 64 });
-  await safeDeferReply(interaction);
-  const row = await buildEmployeeSelectRow(interaction.guild, 'pay');
-  if (!row) return interaction.editReply('❌ Não encontrei funcionários para listar.');
-  return interaction.editReply({ content: 'Selecione o funcionário para registrar pagamento.', components: [row] });
-}
-
-if (interaction.isButton() && interaction.customId === 'mgmt_open_list') {
-  if (!isStaff(interaction.member)) return interaction.reply({ content: '❌ Apenas Gerência/Proprietário.', flags: 64 });
-  await safeDeferReply(interaction);
-  const row = await buildEmployeeSelectRow(interaction.guild, 'list');
-  if (!row) return interaction.editReply('❌ Não encontrei funcionários para listar.');
-  return interaction.editReply({ content: 'Selecione o funcionário para listar os últimos registros.', components: [row] });
-}
-
-if (interaction.isButton() && interaction.customId === 'mgmt_open_day') {
-  if (!isStaff(interaction.member)) return interaction.reply({ content: '❌ Apenas Gerência/Proprietário.', flags: 64 });
-  return safeShowModal(interaction, managementDayModal());
-}
-
-if (interaction.isButton() && interaction.customId === 'mgmt_open_cancel') {
-  if (!isStaff(interaction.member)) return interaction.reply({ content: '❌ Apenas Gerência/Proprietário.', flags: 64 });
-  return safeShowModal(interaction, managementCancelModal());
-}
-
-if (interaction.isStringSelectMenu() && interaction.customId.startsWith('mgmt_select_employee:')) {
-  if (!isStaff(interaction.member)) return interaction.reply({ content: '❌ Apenas Gerência/Proprietário.', flags: 64 });
-  const action = interaction.customId.split(':')[1];
-  const userId = interaction.values?.[0];
-  const user = await interaction.client.users.fetch(userId).catch(() => null);
-  if (!user) return interaction.reply({ content: '❌ Funcionário não encontrado.', flags: 64 });
-
-  if (action === 'period') {
-    return safeShowModal(interaction, managementPeriodModal(userId));
-  }
-
-  if (action === 'pay') {
-    return safeShowModal(interaction, managementPaymentModal(userId));
-  }
-
-  await safeDeferReply(interaction);
-
-  if (action === 'total') {
-    const totals = totalsByUser(interaction.guildId, userId, { onlyOpen: false });
-    const keys = Object.keys(totals);
-    if (!keys.length) return interaction.editReply(`Sem registros para **${user.tag}**.`);
-    const lines = keys.map(k => `• **${getItem(k)?.label || k}**: ${totals[k]}`);
-    return interaction.editReply(`📦 **Totais de ${user.tag} (geral):**\n${lines.join('\n')}`);
-  }
-
-  if (action === 'open') {
-    const calc = computePayment(interaction.guildId, userId);
-    const keys = Object.keys(calc.itemTotals);
-    if (!keys.length) return interaction.editReply(`✅ **${user.tag}** não tem nada em aberto.`);
-    const lines = keys.map(k => `• **${getItem(k)?.label || k}**: ${calc.itemTotals[k]} → **${money(calc.itemMoney[k])}**`);
-    return interaction.editReply(`💰 **Em aberto — ${user.tag}**\n${lines.join('\n')}\n\nTotal: **${money(calc.grand)}**`);
-  }
-
-
-  if (action === 'list') {
-    let deposits = loadDeposits()
-      .filter(d => d.guildId === interaction.guildId && d.userId === userId)
-      .sort((a, b) => new Date(b.createdAt || b.day || 0) - new Date(a.createdAt || a.day || 0))
-      .slice(0, 10);
-
-    if (!deposits.length) return interaction.editReply(`Sem registros para **${user.tag}**.`);
-    const lines = deposits.map(d => `• **#${d.id}** | **${brDateFromYMD(d.day)}** | **${getItem(d.itemKey)?.label || d.itemKey}** x **${d.qty}** | **${d.status}**`);
-    return interaction.editReply(`📄 **Últimos registros — ${user.tag}**\n${lines.join('\n')}`);
-  }
-}
-
 if (interaction.isButton() && interaction.customId === 'farm_create_thread') {
       await safeDeferReply(interaction);
       const thread = await getOrCreatePrivateThread(interaction);
       return interaction.editReply(`✅ Sua pasta: ${thread.toString()}`);
+    }
+
+if (interaction.isButton() && interaction.customId.startsWith('farm_register_from_proof:')) {
+      await safeDeferReply(interaction);
+
+      const proofMessageId = interaction.customId.split(':')[1];
+      const thread = await getOrCreatePrivateThread(interaction);
+
+      if (interaction.channelId !== thread.id) {
+        return interaction.editReply(`⚠️ Use o botão dentro da sua pasta: ${thread.toString()}`);
+      }
+
+      const proofMsg = await getProofMessageById(
+        thread,
+        interaction.user.id,
+        proofMessageId,
+        cfg.proof?.maxMinutesSinceProof ?? 5
+      );
+
+      if (!proofMsg) {
+        return interaction.editReply(`📸 Esse print não é válido. Envie um print novo e clique no botão abaixo dele.`);
+      }
+
+      if (isProofUsed(interaction.guildId, proofMsg.id)) {
+        return interaction.editReply('⚠️ Esse print já foi usado. Envie um print novo e clique no botão abaixo dele.');
+      }
+
+      session.set(interaction.user.id, {
+        threadId: thread.id,
+        proofUrl: proofMsg.url,
+        proofMessageId: proofMsg.id,
+        itemKey: null,
+        qty: null
+      });
+
+      return interaction.editReply({
+        content: `Selecione o material que você está registrando para este print.\n✅ Print selecionado: ${proofMsg.url}`,
+        components: [itemsMenu()]
+      });
     }
 
 if (interaction.isButton() && interaction.customId === 'farm_open_register') {
@@ -1771,163 +1819,6 @@ if (interaction.isModalSubmit() && interaction.customId === 'register_participan
         `✅ Registrado com sucesso!\n• Cargo: **Participante**\n• Nome: **${nome}**\n• Pombo: **${pombo}**\n• Cavalo: **${cavalo}**\n• Raça: **${raca}**`
       );
     }
-
-
-if (interaction.isModalSubmit() && interaction.customId.startsWith('mgmt_period_modal:')) {
-  if (!isStaff(interaction.member)) return interaction.reply({ content: '❌ Apenas Gerência/Proprietário.', flags: 64 });
-  await safeDeferReply(interaction);
-
-  const userId = interaction.customId.split(':')[1];
-  const user = await interaction.client.users.fetch(userId).catch(() => null);
-  if (!user) return interaction.editReply('❌ Funcionário não encontrado.');
-
-  const startYmd = parseBrDateToYMD(interaction.fields.getTextInputValue('inicio'));
-  const endYmd = parseBrDateToYMD(interaction.fields.getTextInputValue('fim'));
-  if (!startYmd || !endYmd) return interaction.editReply('❌ Use o formato de data **dd/mm/aaaa**.');
-  if (startYmd > endYmd) return interaction.editReply('❌ A data inicial não pode ser maior que a final.');
-
-  const deposits = getUserPeriodDeposits(interaction.guildId, userId, startYmd, endYmd);
-  if (!deposits.length) {
-    return interaction.editReply(`Sem registros para **${user.tag}** no período **${formatPeriodLabel(startYmd, endYmd)}**.`);
-  }
-
-  const totals = summarizeDepositsByItem(deposits);
-  const lines = Object.keys(totals).map(k => `• **${getItem(k)?.label || k}**: ${totals[k]}`);
-
-  return interaction.editReply(
-    `📊 **Farm de ${user.tag}**\n` +
-    `• Período: **${formatPeriodLabel(startYmd, endYmd)}**\n` +
-    `• Registros encontrados: **${deposits.length}**\n\n` +
-    `${lines.join('\n')}`
-  );
-}
-
-if (interaction.isModalSubmit() && interaction.customId === 'mgmt_day_modal') {
-  if (!isStaff(interaction.member)) return interaction.reply({ content: '❌ Apenas Gerência/Proprietário.', flags: 64 });
-  await safeDeferReply(interaction);
-
-  const day = parseBrDateToYMD(interaction.fields.getTextInputValue('data'));
-  if (!day) return interaction.editReply('❌ Use o formato de data **dd/mm/aaaa**.');
-
-  const map = totalsDay(interaction.guildId, day);
-  if (!map.size) return interaction.editReply(`Sem registros em **${brDateFromYMD(day)}**.`);
-
-  const lines = [];
-  for (const [key, totals] of map.entries()) {
-    const [, tag] = key.split('|');
-    const items = Object.keys(totals).map(k => `${getItem(k)?.label || k}: ${totals[k]}`).join(', ');
-    lines.push(`• **${tag}** — ${items}`);
-  }
-
-  return interaction.editReply(`📅 **Resumo — ${brDateFromYMD(day)}**\n${lines.join('\n')}`);
-}
-
-if (interaction.isModalSubmit() && interaction.customId.startsWith('mgmt_pay_modal:')) {
-  if (!isStaff(interaction.member)) return interaction.reply({ content: '❌ Apenas Gerência/Proprietário.', flags: 64 });
-  await safeDeferReply(interaction);
-
-  const userId = interaction.customId.split(':')[1];
-  const user = await interaction.client.users.fetch(userId).catch(() => null);
-  if (!user) return interaction.editReply('❌ Funcionário não encontrado.');
-
-  const raw = interaction.fields.getTextInputValue('valor').trim();
-  const overrideValue = raw ? Number(raw.replace(',', '.')) : null;
-  if (raw && !Number.isFinite(overrideValue)) return interaction.editReply('❌ Valor inválido.');
-
-  const deposits = loadDeposits();
-  const open = deposits.filter(d =>
-    d.guildId === interaction.guildId &&
-    d.userId === userId &&
-    d.status === 'ABERTO' &&
-    d.status !== 'CANCELADO'
-  );
-
-  if (!open.length) return interaction.editReply(`✅ **${user.tag}** não tem nada em aberto.`);
-
-  const calc = computePayment(interaction.guildId, userId);
-  const valueToPay = Number.isFinite(overrideValue) ? overrideValue : calc.grand;
-
-  const openDays = open.map(d => d.day).filter(Boolean).sort();
-  const periodStart = openDays[0] || ymd();
-  const periodEnd = ymd();
-
-  const payId = `pay_${Date.now()}_${Math.floor(Math.random() * 9999)}`;
-  for (const d of deposits) {
-    if (d.guildId === interaction.guildId && d.userId === userId && d.status === 'ABERTO') {
-      d.status = 'PAGO';
-      d.paymentId = payId;
-      d.paidAt = nowIso();
-      d.paidBy = interaction.user.tag;
-    }
-  }
-  saveDeposits(deposits);
-
-  const payments = loadPayments();
-  payments.push({
-    guildId: interaction.guildId,
-    paymentId: payId,
-    userId: userId,
-    userTag: user.tag,
-    paidValue: Number(valueToPay),
-    calculatedValue: Number(calc.grand),
-    periodStart,
-    periodEnd,
-    paidAt: nowIso(),
-    paidBy: interaction.user.tag
-  });
-  savePayments(payments);
-
-  await sendPaymentLog(interaction,
-    `💰 **Pagamento registrado**\n` +
-    `• Funcionário: **${user.tag}**\n` +
-    `• Período: **${brDateFromYMD(periodStart)}** até **${brDateFromYMD(periodEnd)}**\n` +
-    `• Valor calculado: **${money(calc.grand)}**\n` +
-    `• Valor registrado: **${money(valueToPay)}**\n` +
-    `• Pago por: **${interaction.user.tag}**\n` +
-    `• Registrado em: **${brDateTimeFromIso(nowIso())}**\n` +
-    `• paymentId: **${payId}**`
-  );
-
-  return interaction.editReply(
-    `✅ Pagamento registrado para **${user.tag}**.\n` +
-    `• Total calculado: **${money(calc.grand)}**\n` +
-    `• Valor registrado: **${money(valueToPay)}**\n` +
-    `• paymentId: **${payId}**`
-  );
-}
-
-if (interaction.isModalSubmit() && interaction.customId === 'mgmt_cancel_modal') {
-  if (!isStaff(interaction.member)) return interaction.reply({ content: '❌ Apenas Gerência/Proprietário.', flags: 64 });
-  await safeDeferReply(interaction);
-
-  const id = Number(interaction.fields.getTextInputValue('id').trim());
-  const motivo = interaction.fields.getTextInputValue('motivo').trim();
-  if (!Number.isInteger(id) || id <= 0) return interaction.editReply('❌ ID inválido.');
-
-  const deposits = loadDeposits();
-  const target = deposits.find(d => d.guildId === interaction.guildId && d.id === id);
-  if (!target) return interaction.editReply('❌ Registro não encontrado.');
-  if (target.status === 'CANCELADO') return interaction.editReply('⚠️ Esse registro já está cancelado.');
-
-  target.status = 'CANCELADO';
-  target.canceledAt = nowIso();
-  target.canceledBy = interaction.user.tag;
-  target.cancelReason = motivo;
-  saveDeposits(deposits);
-
-  await sendDepositLog(interaction,
-    `🗑️ **Registro cancelado**\n` +
-    `• ID: **${id}**\n` +
-    `• Funcionário: **${target.userTag}**\n` +
-    `• Item: **${getItem(target.itemKey)?.label || target.itemKey}**\n` +
-    `• Quantidade: **${target.qty}**\n` +
-    `• Cancelado por: **${interaction.user.tag}**\n` +
-    `• Motivo: **${motivo}**\n` +
-    `• Prova: ${target.proofUrl}`
-  );
-
-  return interaction.editReply(`✅ Registro **${id}** cancelado.`);
-}
 
     // =====================
     // SLASH COMMANDS
@@ -2763,7 +2654,7 @@ if (interaction.isButton()) {
           `• Funcionário: **${rec.userTag}**\n` +
           `• Item: **${getItem(rec.itemKey)?.label || rec.itemKey}**\n` +
           `• Quantidade: **${rec.qty}**\n` +
-          `• Data: **${rec.day}**\n` +
+          `• Registrado em: **${brDateTimeFromIso(rec.createdAt)}**\n` +
           `• Prova: ${rec.proofUrl}`
         );
 
@@ -2774,7 +2665,7 @@ if (interaction.isButton()) {
             `• ID: **${rec.id}**\n` +
             `• Item: **${getItem(rec.itemKey)?.label || rec.itemKey}**\n` +
             `• Quantidade: **${rec.qty}**\n` +
-            `• Data: **${rec.day}**`
+            `• Registrado em: **${brDateTimeFromIso(rec.createdAt)}**`
           ).catch(() => null);
           await ensureFarmThreadStarterMessage(threadChannel).catch(() => null);
         }
