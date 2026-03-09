@@ -286,6 +286,39 @@ async function sendPaymentLog(interaction, text) {
 // =====================
 // THREADS (FARM)
 // =====================
+async function ensureStaffCanSeeFarmThread(thread, guild) {
+  const roleIds = [cfg.roles?.ownerRoleId, cfg.roles?.managerRoleId].filter(Boolean);
+  if (!roleIds.length) return;
+
+  await guild.members.fetch().catch(() => null);
+
+  const staffMembers = guild.members.cache.filter(member =>
+    roleIds.some(roleId => member.roles.cache.has(roleId))
+  );
+
+  for (const member of staffMembers.values()) {
+    await thread.members.add(member.id).catch(() => null);
+  }
+}
+
+async function syncAllFarmThreadsVisibility(guild) {
+  const hubId = cfg.channels?.farmHubChannelId;
+  if (!hubId) return;
+
+  const hub = await guild.channels.fetch(hubId).catch(() => null);
+  if (!hub) return;
+
+  const active = await hub.threads.fetchActive().catch(() => null);
+  for (const thread of active?.threads?.values?.() || []) {
+    await ensureStaffCanSeeFarmThread(thread, guild);
+  }
+
+  const archived = await hub.threads.fetchArchived({ limit: 100 }).catch(() => null);
+  for (const thread of archived?.threads?.values?.() || []) {
+    await ensureStaffCanSeeFarmThread(thread, guild);
+  }
+}
+
 async function getOrCreatePrivateThread(interaction) {
   const hubId = cfg.channels?.farmHubChannelId;
   if (!hubId) throw new Error('farmHubChannelId não configurado.');
@@ -295,7 +328,11 @@ async function getOrCreatePrivateThread(interaction) {
 
   const active = await hub.threads.fetchActive();
   const existing = active.threads.find(t => t.name === threadName);
-  if (existing) return existing;
+  if (existing) {
+    await existing.members.add(interaction.user.id).catch(() => null);
+    await ensureStaffCanSeeFarmThread(existing, interaction.guild);
+    return existing;
+  }
 
   const t = await hub.threads.create({
     name: threadName,
@@ -305,6 +342,7 @@ async function getOrCreatePrivateThread(interaction) {
   });
 
   await t.members.add(interaction.user.id);
+  await ensureStaffCanSeeFarmThread(t, interaction.guild);
 
   await t.send(
     `👋 **Pasta privada criada!**\n` +
@@ -1097,6 +1135,13 @@ client.once(Events.ClientReady, async () => {
   await ensureCommandsPanel();
   await ensureSuppliersPanel();
   await ensureAbsencePanel();
+
+  for (const guild of client.guilds.cache.values()) {
+    await syncAllFarmThreadsVisibility(guild).catch((e) => {
+      console.error('❌ Erro ao sincronizar permissões das pastas FARM:', e);
+    });
+  }
+
   startRankingScheduler();
 });
 
