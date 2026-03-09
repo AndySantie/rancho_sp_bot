@@ -66,6 +66,56 @@
       "price": 0.00
     },
     {
+      "key": "galho_arvore",
+      "label": "Galho de Arvóre",
+      "price": 0.00
+    },
+    {
+      "key": "madeira_bruta",
+      "label": "Madeira Bruta",
+      "price": 0.00
+    },
+    {
+      "key": "casca_arvore",
+      "label": "Casac de Arvóre",
+      "price": 0.00
+    },
+    {
+      "key": "cana_acucar",
+      "label": "Cana de Açucar",
+      "price": 0.00
+    },
+    {
+      "key": "maca",
+      "label": "Maça",
+      "price": 0.00
+    },
+    {
+      "key": "milho",
+      "label": "Milho",
+      "price": 0.00
+    },
+    {
+      "key": "laranja",
+      "label": "Laranja",
+      "price": 0.00
+    },
+    {
+      "key": "limao",
+      "label": "Limão",
+      "price": 0.00
+    },
+    {
+      "key": "feijao",
+      "label": "Feijão",
+      "price": 0.00
+    },
+    {
+      "key": "seiva",
+      "label": "Seiva",
+      "price": 0.00
+    },
+    {
       "key": "millefaliun",
       "label": "Millefaliun",
       "price": 0.00

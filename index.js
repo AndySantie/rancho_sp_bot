@@ -12,8 +12,7 @@ const {
   AttachmentBuilder,
   ButtonBuilder,
   ButtonStyle,
-  EmbedBuilder,
-  MessageType
+  EmbedBuilder
 } = require('discord.js');
 
 const { stringify } = require('csv-stringify/sync');
@@ -287,37 +286,73 @@ async function sendPaymentLog(interaction, text) {
 // =====================
 // THREADS (FARM)
 // =====================
-async function ensureStaffCanSeeFarmThread(thread, guild) {
-  const roleIds = [cfg.roles?.ownerRoleId, cfg.roles?.managerRoleId].filter(Boolean);
-  if (!roleIds.length) return;
-
-  await guild.members.fetch().catch(() => null);
-
-  const staffMembers = guild.members.cache.filter(member =>
-    roleIds.some(roleId => member.roles.cache.has(roleId))
-  );
-
-  for (const member of staffMembers.values()) {
-    await thread.members.add(member.id).catch(() => null);
-  }
+function getFarmThreadName(user) {
+  return `${cfg.threads?.namePrefix || 'farm-'}${user.username}`.toLowerCase();
 }
 
-async function syncAllFarmThreadsVisibility(guild) {
-  const hubId = cfg.channels?.farmHubChannelId;
-  if (!hubId) return;
+function farmThreadMessageText() {
+  return (
+    'Clique no botão abaixo para registrar seu farm, preencha o formulário com as informações corretas e anexe o print do seu farm.\n\n' +
+    '📸 Sempre anexe um print antes de registrar.\n\n' +
+    `⏱️ Print válido por **${cfg.proof?.maxMinutesSinceProof ?? 5} minutos**.`
+  );
+}
 
-  const hub = await guild.channels.fetch(hubId).catch(() => null);
-  if (!hub) return;
+function farmCreateButtonRow() {
+  return new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId('farm_create_thread')
+      .setLabel('Criar Pasta Farm')
+      .setStyle(ButtonStyle.Primary)
+  );
+}
+
+function farmThreadButtonsRow() {
+  return new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId('farm_open_register')
+      .setLabel('Registrar Farm')
+      .setStyle(ButtonStyle.Success),
+    new ButtonBuilder()
+      .setCustomId('farm_show_total')
+      .setLabel('Meu Total')
+      .setStyle(ButtonStyle.Secondary)
+  );
+}
+
+async function findExistingFarmThread(hub, user) {
+  const threadName = getFarmThreadName(user);
 
   const active = await hub.threads.fetchActive().catch(() => null);
-  for (const thread of active?.threads?.values?.() || []) {
-    await ensureStaffCanSeeFarmThread(thread, guild);
-  }
+  const activeThread = active?.threads?.find?.(t => t.name === threadName) || null;
+  if (activeThread) return { thread: activeThread, archived: false };
 
   const archived = await hub.threads.fetchArchived({ limit: 100 }).catch(() => null);
-  for (const thread of archived?.threads?.values?.() || []) {
-    await ensureStaffCanSeeFarmThread(thread, guild);
+  const archivedThread = archived?.threads?.find?.(t => t.name === threadName) || null;
+  if (archivedThread) return { thread: archivedThread, archived: true };
+
+  return null;
+}
+
+async function ensureFarmThreadStarterMessage(thread) {
+  const msgs = await thread.messages.fetch({ limit: 20 }).catch(() => null);
+  const existing = msgs?.find?.(m =>
+    m.author?.id === client.user?.id &&
+    m.components?.some?.(row => row.components?.some?.(c => c.customId === 'farm_open_register' || c.customId === 'farm_show_total'))
+  );
+
+  if (existing) {
+    await existing.edit({
+      content: farmThreadMessageText(),
+      components: [farmThreadButtonsRow()]
+    }).catch(() => null);
+    return existing;
   }
+
+  return thread.send({
+    content: farmThreadMessageText(),
+    components: [farmThreadButtonsRow()]
+  }).catch(() => null);
 }
 
 async function getOrCreatePrivateThread(interaction) {
@@ -325,18 +360,20 @@ async function getOrCreatePrivateThread(interaction) {
   if (!hubId) throw new Error('farmHubChannelId não configurado.');
 
   const hub = await interaction.guild.channels.fetch(hubId);
-  const threadName = `${cfg.threads?.namePrefix || 'farm-'}${interaction.user.username}`.toLowerCase();
+  const found = await findExistingFarmThread(hub, interaction.user);
 
-  const active = await hub.threads.fetchActive();
-  const existing = active.threads.find(t => t.name === threadName);
-  if (existing) {
-    await existing.members.add(interaction.user.id).catch(() => null);
-    await ensureStaffCanSeeFarmThread(existing, interaction.guild);
-    return existing;
+  if (found?.thread) {
+    if (found.archived) {
+      await found.thread.setArchived(false, 'Reabrir pasta privada de FARM').catch(() => null);
+    }
+    await found.thread.members.add(interaction.user.id).catch(() => null);
+    await ensureStaffCanSeeFarmThread(found.thread, interaction.guild);
+    await ensureFarmThreadStarterMessage(found.thread);
+    return found.thread;
   }
 
   const t = await hub.threads.create({
-    name: threadName,
+    name: getFarmThreadName(interaction.user),
     type: ChannelType.PrivateThread,
     autoArchiveDuration: cfg.threads?.autoArchiveMinutes || 10080,
     reason: 'Pasta privada de FARM'
@@ -344,13 +381,7 @@ async function getOrCreatePrivateThread(interaction) {
 
   await t.members.add(interaction.user.id);
   await ensureStaffCanSeeFarmThread(t, interaction.guild);
-
-  await t.send(
-    `👋 **Pasta privada criada!**\n` +
-    `Use /armazenar aqui dentro.\n` +
-    `📸 Sempre anexe um print antes de registrar.\n\n` +
-    `⏱️ Print válido por **${cfg.proof?.maxMinutesSinceProof ?? 5} minutos**.`
-  );
+  await ensureFarmThreadStarterMessage(t);
 
   return t;
 }
@@ -388,7 +419,19 @@ async function findFarmThreadByUser(guild, user) {
   const hub = await guild.channels.fetch(hubId).catch(() => null);
   if (!hub) return null;
 
-  return findExistingFarmThread(hub, user);
+  const threadName = `${cfg.threads?.namePrefix || 'farm-'}${user.username}`.toLowerCase();
+
+  // tenta ativo
+  const active = await hub.threads.fetchActive().catch(() => null);
+  const existingActive = active?.threads?.find(t => t.name === threadName);
+  if (existingActive) return existingActive;
+
+  // tenta arquivadas recentes
+  const archived = await hub.threads.fetchArchived({ limit: 100 }).catch(() => null);
+  const existingArchived = archived?.threads?.find(t => t.name === threadName);
+  if (existingArchived) return existingArchived;
+
+  return null;
 }
 
 // =====================
@@ -853,24 +896,15 @@ async function ensureFarmGuidePanel() {
   const channelId = cfg.channels?.registrosFarmChannelId;
   if (!channelId) return;
 
-  const mins = cfg.proof?.maxMinutesSinceProof ?? 5;
-
   const text =
-    '📌 **COMO REGISTRAR FARM (PASSO A PASSO)**\n' +
-    '1) Use **/minha_pasta** para abrir sua pasta privada\n' +
-    '2) Dentro da sua pasta, **anexe um PRINT** do inventário/baú (obrigatório)\n' +
-    '3) Depois do print, use **/armazenar** e selecione o item + quantidade\n' +
-    '4) Pronto: o registro vai para o **log-farm** e entra no seu total\n\n' +
-    '⚠️ **Regras rápidas**\n' +
-    `• Print vale **${mins} minutos**\n` +
-    '• Print **não pode** ser reutilizado\n' +
-    '• Se errar, chame a gerência';
+    '📌 **COMO CRIAR SUA PASTA DE FARM**\n' +
+    'Basta clicar no botão abaixo, para abrir sua pasta privada';
 
   await upsertPanelMessage({
     key: 'farm_guide',
     channelId,
     content: text,
-    components: []
+    components: [farmCreateButtonRow()]
   });
 }
 
@@ -879,11 +913,11 @@ async function ensureCommandsPanel() {
   if (!channelId) return;
 
   const text =
-    '📌 **COMANDOS DO BOT — FARM**\n\n' +
+    '📌 **PAINEL DO BOT — FARM**\n\n' +
     '✅ **Funcionários**\n' +
-    '• **/minha_pasta** → cria/abre sua pasta privada de FARM\n' +
-    '• **/armazenar** → registra um armazenamento (print obrigatório antes)\n' +
-    '• **/meu_total** → mostra seus totais\n\n' +
+    '• **Criar Pasta Farm** → abre sua pasta privada de FARM\n' +
+    '• **Registrar Farm** → registra um armazenamento (print obrigatório antes)\n' +
+    '• **Meu Total** → mostra seus totais\n\n' +
     '👑 **Somente Gerência/Proprietário**\n' +
     '• **/total_funcionario** → totais de um funcionário\n' +
     '• **/resumo_dia** → resumo do dia\n' +
@@ -1124,13 +1158,6 @@ client.once(Events.ClientReady, async () => {
   await ensureCommandsPanel();
   await ensureSuppliersPanel();
   await ensureAbsencePanel();
-
-  for (const guild of client.guilds.cache.values()) {
-    await syncAllFarmThreadsVisibility(guild).catch((e) => {
-      console.error('❌ Erro ao sincronizar permissões das pastas FARM:', e);
-    });
-  }
-
   startRankingScheduler();
 });
 
@@ -1192,6 +1219,65 @@ if (interaction.isButton() && interaction.customId === 'register_sponsor_open_mo
 
 if (interaction.isButton() && interaction.customId === 'register_participant_open_modal') {
       return safeShowModal(interaction, registerParticipantModal());
+    }
+
+if (interaction.isButton() && interaction.customId === 'farm_create_thread') {
+      await safeDeferReply(interaction);
+      const thread = await getOrCreatePrivateThread(interaction);
+      return interaction.editReply(`✅ Sua pasta: ${thread.toString()}`);
+    }
+
+if (interaction.isButton() && interaction.customId === 'farm_open_register') {
+      await safeDeferReply(interaction);
+
+      const thread = await getOrCreatePrivateThread(interaction);
+
+      if (interaction.channelId !== thread.id) {
+        return interaction.editReply(`⚠️ Use o botão dentro da sua pasta: ${thread.toString()}`);
+      }
+
+      const proofMsg = await getLatestProofMessage(thread, interaction.user.id, cfg.proof?.maxMinutesSinceProof ?? 5);
+      if (!proofMsg) {
+        return interaction.editReply(`📸 Anexe um print dos últimos ${(cfg.proof?.maxMinutesSinceProof ?? 5)} min e tente novamente.`);
+      }
+
+      if (isProofUsed(interaction.guildId, proofMsg.id)) {
+        return interaction.editReply('⚠️ Esse print já foi usado. Anexe um print novo e tente novamente.');
+      }
+
+      session.set(interaction.user.id, {
+        threadId: thread.id,
+        proofUrl: proofMsg.url,
+        proofMessageId: proofMsg.id,
+        itemKey: null,
+        qty: null
+      });
+
+      return interaction.editReply({
+        content: `Selecione o material que você está registrando.\n✅ Print detectado (último): ${proofMsg.url}`,
+        components: [itemsMenu()]
+      });
+    }
+
+if (interaction.isButton() && interaction.customId === 'farm_show_total') {
+      await safeDeferReply(interaction);
+
+      const thread = await getOrCreatePrivateThread(interaction);
+      if (interaction.channelId !== thread.id) {
+        return interaction.editReply(`⚠️ Use o botão dentro da sua pasta: ${thread.toString()}`);
+      }
+
+      const totals = totalsByUser(interaction.guildId, interaction.user.id, { onlyOpen: false });
+      const keys = Object.keys(totals);
+
+      if (!keys.length) return interaction.editReply('Ainda não há registros seus.');
+
+      const lines = keys.map(k => {
+        const label = getItem(k)?.label || k;
+        return `• **${label}**: ${totals[k]}`;
+      });
+
+      return interaction.editReply(`📦 **Seus totais (geral):**\n${lines.join('\n')}`);
     }
 
     
@@ -1514,7 +1600,7 @@ if (cmd === 'cadastrar') {
         });
 
         return interaction.editReply({
-          content: `O que você está armazenando?\n✅ Print detectado (último): ${proofMsg.url}`,
+          content: `Selecione o material que você está registrando.\n✅ Print detectado (último): ${proofMsg.url}`,
           components: [itemsMenu()]
         });
       }
@@ -1930,7 +2016,7 @@ if (cmd === 'cadastrar') {
 
     if (interaction.isStringSelectMenu() && interaction.customId === 'armazenar_select_item') {
       const s = session.get(interaction.user.id);
-      if (!s) return interaction.reply({ content: '⚠️ Sessão expirou. Use /armazenar de novo.', flags: 64 });
+      if (!s) return interaction.reply({ content: '⚠️ Sessão expirou. Use o botão Registrar Farm novamente.', flags: 64 });
       if (interaction.channelId !== s.threadId) return interaction.reply({ content: '⚠️ Use dentro da sua pasta.', flags: 64 });
 
       const itemKey = interaction.values[0];
@@ -2019,7 +2105,7 @@ if (interaction.isModalSubmit() && interaction.customId.startsWith('armazenar_qt
       }
 
       const s = session.get(interaction.user.id);
-      if (!s) return interaction.editReply('⚠️ Sessão expirou. Use /armazenar de novo.');
+      if (!s) return interaction.editReply('⚠️ Sessão expirou. Use o botão Registrar Farm novamente.');
       if (interaction.channelId !== s.threadId) return interaction.editReply('⚠️ Use dentro da sua pasta.');
 
       s.qty = qty;
@@ -2156,7 +2242,7 @@ if (interaction.isButton()) {
         await safeDeferReply(interaction);
 
         const s = session.get(interaction.user.id);
-        if (!s) return interaction.editReply('⚠️ Sessão expirou. Use /armazenar de novo.');
+        if (!s) return interaction.editReply('⚠️ Sessão expirou. Use o botão Registrar Farm novamente.');
         if (interaction.channelId !== s.threadId) return interaction.editReply('⚠️ Use dentro da sua pasta.');
 
         if (isProofUsed(interaction.guildId, s.proofMessageId)) {
@@ -2194,6 +2280,18 @@ if (interaction.isButton()) {
           `• Data: **${rec.day}**\n` +
           `• Prova: ${rec.proofUrl}`
         );
+
+        const threadChannel = await interaction.guild.channels.fetch(s.threadId).catch(() => null);
+        if (threadChannel?.isTextBased?.()) {
+          await threadChannel.send(
+            `✅ **Registro salvo com sucesso**\n` +
+            `• ID: **${rec.id}**\n` +
+            `• Item: **${getItem(rec.itemKey)?.label || rec.itemKey}**\n` +
+            `• Quantidade: **${rec.qty}**\n` +
+            `• Data: **${rec.day}**`
+          ).catch(() => null);
+          await ensureFarmThreadStarterMessage(threadChannel).catch(() => null);
+        }
 
         return interaction.editReply(`✅ Registro salvo! ID **${rec.id}**`);
       }
