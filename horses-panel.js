@@ -224,7 +224,13 @@ function buildHorseEmbed(horse) {
     .setFooter({ text: `ID interno: ${horse.id}` });
 }
 
-function buildHorseSelectPage(page = 0, filtered = sortByName(horses), customId = null, title = '🐎 Consultar cavalo', description = null) {
+function buildHorseSelectPage(
+  page = 0,
+  filtered = sortByName(horses),
+  customId = null,
+  title = '🐎 Consultar cavalo',
+  description = null,
+) {
   const pageSize = 25;
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
   const safePage = Math.min(Math.max(page, 0), totalPages - 1);
@@ -602,8 +608,6 @@ async function handleHorseInteraction(interaction) {
     }
 
     if (id === 'horses:ranking') {
-      await interaction.deferUpdate();
-
       const embed = buildSimpleListEmbed('🏆 Top 15 cavalos por total', topHorsesByTotal(15));
       const row = new ActionRowBuilder().addComponents(
         new ButtonBuilder()
@@ -616,7 +620,11 @@ async function handleHorseInteraction(interaction) {
           .setStyle(ButtonStyle.Secondary),
       );
 
-      return interaction.editReply({ embeds: [embed], components: [row] });
+      return interaction.reply({
+        embeds: [embed],
+        components: [row],
+        ephemeral: true,
+      });
     }
 
     if (id === 'horses:rankingMenu') {
