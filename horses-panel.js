@@ -89,12 +89,34 @@ function buildColorBar(value, max, fillEmoji) {
   return `${fillEmoji.repeat(filled)}${'⬜'.repeat(empty)} ${safeValue}/${max}`;
 }
 
+function buildStarsFromTotal(total) {
+  const safeTotal = Math.max(0, Math.min(safeNumber(total), 60));
+  let stars = 1;
+
+  if (safeTotal >= 49) {
+    stars = 5;
+  } else if (safeTotal >= 37) {
+    stars = 4;
+  } else if (safeTotal >= 25) {
+    stars = 3;
+  } else if (safeTotal >= 13) {
+    stars = 2;
+  }
+
+  return '⭐'.repeat(stars);
+}
+
 function statLine(label, value, max, emoji) {
   return `${padRight(label, 12)} ${buildColorBar(value, max, emoji)}`;
 }
 
+function totalLine(total) {
+  const safeTotal = Math.max(0, Math.min(safeNumber(total), 60));
+  const stars = buildStarsFromTotal(safeTotal);
+  return `${padRight('Total', 12)} ${safeTotal}/60 ${stars}`;
+}
+
 function buildHorseStatsBlock(horse) {
-  const totalMax = 60;
   return [
     statLine('Vida', horse.vida, 10, '🟥'),
     statLine('Estamina', horse.estamina, 10, '🟩'),
@@ -102,7 +124,23 @@ function buildHorseStatsBlock(horse) {
     statLine('Agilidade', horse.agilidade, 10, '🟪'),
     statLine('Velocidade', horse.velocidade, 10, '🟦'),
     statLine('Aceleracao', horse.aceleracao, 10, '🟨'),
-    statLine('Total', horse.total, totalMax, '🟧'),
+    totalLine(horse.total),
+  ].join('\n');
+}
+
+function buildCompareTotalLine(label, totalA, totalB, horseAName, horseBName) {
+  const safeA = Math.max(0, Math.min(safeNumber(totalA), 60));
+  const safeB = Math.max(0, Math.min(safeNumber(totalB), 60));
+  let winner = 'Empate';
+
+  if (safeA > safeB) winner = horseAName;
+  if (safeB > safeA) winner = horseBName;
+
+  return [
+    `**${label}**`,
+    `${horseAName}: ${safeA}/60 ${buildStarsFromTotal(safeA)}`,
+    `${horseBName}: ${safeB}/60 ${buildStarsFromTotal(safeB)}`,
+    `Vantagem: **${winner}**`,
   ].join('\n');
 }
 
@@ -150,29 +188,26 @@ function buildCompareStatsBlock(horseA, horseB) {
       max: 10,
       emoji: '🟨',
     },
-    {
-      label: 'Total',
-      a: safeNumber(horseA.total),
-      b: safeNumber(horseB.total),
-      max: 60,
-      emoji: '🟧',
-    },
   ];
 
-  return lines
-    .map((row) => {
-      let winner = 'Empate';
-      if (row.a > row.b) winner = horseA.nome;
-      if (row.b > row.a) winner = horseB.nome;
+  const blocks = lines.map((row) => {
+    let winner = 'Empate';
+    if (row.a > row.b) winner = horseA.nome;
+    if (row.b > row.a) winner = horseB.nome;
 
-      return [
-        `**${row.label}**`,
-        `${horseA.nome}: ${buildColorBar(row.a, row.max, row.emoji)}`,
-        `${horseB.nome}: ${buildColorBar(row.b, row.max, row.emoji)}`,
-        `Vantagem: **${winner}**`,
-      ].join('\n');
-    })
-    .join('\n\n');
+    return [
+      `**${row.label}**`,
+      `${horseA.nome}: ${buildColorBar(row.a, row.max, row.emoji)}`,
+      `${horseB.nome}: ${buildColorBar(row.b, row.max, row.emoji)}`,
+      `Vantagem: **${winner}**`,
+    ].join('\n');
+  });
+
+  blocks.push(
+    buildCompareTotalLine('Total', horseA.total, horseB.total, horseA.nome, horseB.nome),
+  );
+
+  return blocks.join('\n\n');
 }
 
 function buildHorseEmbed(horse) {
@@ -400,7 +435,10 @@ function buildRankingPage(field = 'total', page = 0) {
 
   const lines = slice.map((horse, index) => {
     const position = start + index + 1;
-    return `**${position}º. ${horse.nome}** — ${meta.label}: ${horse[field]} • Total ${horse.total}`;
+    if (field === 'total') {
+      return `**${position}º. ${horse.nome}** — Total: ${horse.total}/60 ${buildStarsFromTotal(horse.total)}`;
+    }
+    return `**${position}º. ${horse.nome}** — ${meta.label}: ${horse[field]} • Total ${horse.total}/60 ${buildStarsFromTotal(horse.total)}`;
   });
 
   const embed = new EmbedBuilder()
