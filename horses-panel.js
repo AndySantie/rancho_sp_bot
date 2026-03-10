@@ -27,23 +27,13 @@ function moneyBr(value) {
   });
 }
 
-function buildHorseEmbed(horse) {
-  return new EmbedBuilder()
-    .setTitle(`🐎 ${horse.nome}`)
-    .setDescription('Consulta completa do cavalo selecionado.')
-    .addFields(
-      { name: '❤️ Vida', value: String(horse.vida), inline: true },
-      { name: '⚡ Estamina', value: String(horse.estamina), inline: true },
-      { name: '🛡️ Coragem', value: String(horse.coragem), inline: true },
-      { name: '🪶 Agilidade', value: String(horse.agilidade), inline: true },
-      { name: '💨 Velocidade', value: String(horse.velocidade), inline: true },
-      { name: '🔥 Aceleração', value: String(horse.aceleracao), inline: true },
-      { name: '🌦️ Clima', value: horse.clima, inline: true },
-      { name: '📊 Total', value: String(horse.total), inline: true },
-      { name: '⚖️ Peso', value: String(horse.peso), inline: true },
-      { name: '💰 Valor', value: horse.valorTexto || moneyBr(horse.valorNumero), inline: true },
-    )
-    .setFooter({ text: `ID interno: ${horse.id}` });
+function safeNumber(value) {
+  const n = Number(value || 0);
+  return Number.isFinite(n) ? n : 0;
+}
+
+function formatHorseSummary(horse) {
+  return `Total ${horse.total} • ${horse.clima} • ${horse.valorTexto}`;
 }
 
 function sortByName(list) {
@@ -68,20 +58,61 @@ function horsesByClimate(clima) {
     });
 }
 
-function buildHorseSelectPage(page = 0, filtered = sortByName(horses)) {
+function rankingByField(field) {
+  return [...horses].sort((a, b) => {
+    const diff = safeNumber(b[field]) - safeNumber(a[field]);
+    if (diff !== 0) return diff;
+    return a.nome.localeCompare(b.nome, 'pt-BR');
+  });
+}
+
+function attributeMeta(field) {
+  const map = {
+    total: { label: 'Total', emoji: '🏆' },
+    velocidade: { label: 'Velocidade', emoji: '💨' },
+    aceleracao: { label: 'Aceleração', emoji: '🔥' },
+    vida: { label: 'Vida', emoji: '❤️' },
+    estamina: { label: 'Estamina', emoji: '⚡' },
+    coragem: { label: 'Coragem', emoji: '🛡️' },
+    agilidade: { label: 'Agilidade', emoji: '🪶' },
+  };
+  return map[field] || { label: field, emoji: '📊' };
+}
+
+function buildHorseEmbed(horse) {
+  return new EmbedBuilder()
+    .setTitle(`🐎 ${horse.nome}`)
+    .setDescription('Consulta completa do cavalo selecionado.')
+    .addFields(
+      { name: '❤️ Vida', value: String(horse.vida), inline: true },
+      { name: '⚡ Estamina', value: String(horse.estamina), inline: true },
+      { name: '🛡️ Coragem', value: String(horse.coragem), inline: true },
+      { name: '🪶 Agilidade', value: String(horse.agilidade), inline: true },
+      { name: '💨 Velocidade', value: String(horse.velocidade), inline: true },
+      { name: '🔥 Aceleração', value: String(horse.aceleracao), inline: true },
+      { name: '🌦️ Clima', value: horse.clima, inline: true },
+      { name: '📊 Total', value: String(horse.total), inline: true },
+      { name: '⚖️ Peso', value: String(horse.peso), inline: true },
+      { name: '💰 Valor', value: horse.valorTexto || moneyBr(horse.valorNumero), inline: true },
+    )
+    .setFooter({ text: `ID interno: ${horse.id}` });
+}
+
+function buildHorseSelectPage(page = 0, filtered = sortByName(horses), customId = null, title = '🐎 Consultar cavalo', description = null) {
   const pageSize = 25;
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
   const safePage = Math.min(Math.max(page, 0), totalPages - 1);
   const slice = filtered.slice(safePage * pageSize, safePage * pageSize + pageSize);
+  const selectCustomId = customId || `horses:select:${safePage}`;
 
   const select = new StringSelectMenuBuilder()
-    .setCustomId(`horses:select:${safePage}`)
+    .setCustomId(selectCustomId)
     .setPlaceholder(`Escolha um cavalo (${filtered.length} encontrados)`)
     .addOptions(
       slice.map((horse) => ({
         label: horse.nome.slice(0, 100),
         value: horse.id,
-        description: `Total ${horse.total} • ${horse.clima} • ${horse.valorTexto}`.slice(0, 100),
+        description: formatHorseSummary(horse).slice(0, 100),
       })),
     );
 
@@ -110,8 +141,11 @@ function buildHorseSelectPage(page = 0, filtered = sortByName(horses)) {
   ];
 
   const embed = new EmbedBuilder()
-    .setTitle('🐎 Consultar cavalo')
-    .setDescription(`Página **${safePage + 1}/${totalPages}** • Escolha um cavalo na lista abaixo.`);
+    .setTitle(title)
+    .setDescription(
+      description ||
+        `Página **${safePage + 1}/${totalPages}** • Escolha um cavalo na lista abaixo.`,
+    );
 
   return { embed, rows };
 }
@@ -142,12 +176,22 @@ function buildMainPanel() {
         .setLabel('🔎 Pesquisar cavalo')
         .setStyle(ButtonStyle.Success),
       new ButtonBuilder()
-        .setCustomId('horses:ranking')
-        .setLabel('🏆 Top total')
+        .setCustomId('horses:compare')
+        .setLabel('⚔️ Comparar cavalos')
         .setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder()
+        .setCustomId('horses:rankingMenu')
+        .setLabel('🏆 Ranking')
+        .setStyle(ButtonStyle.Secondary),
+    ),
+    new ActionRowBuilder().addComponents(
       new ButtonBuilder()
         .setCustomId('horses:climate')
         .setLabel('🌦️ Ver por clima')
+        .setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder()
+        .setCustomId('horses:ranking')
+        .setLabel('📊 Top 15 total')
         .setStyle(ButtonStyle.Secondary),
     ),
   ];
@@ -207,6 +251,130 @@ function buildSimpleListEmbed(title, items) {
   return embed;
 }
 
+function buildRankingMenu() {
+  const embed = new EmbedBuilder()
+    .setTitle('🏆 Ranking de cavalos')
+    .setDescription('Escolha o tipo de ranking que deseja consultar.');
+
+  const rows = [
+    new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId('horses:rankingType:total')
+        .setLabel('🏆 Total geral')
+        .setStyle(ButtonStyle.Primary),
+      new ButtonBuilder()
+        .setCustomId('horses:rankingType:velocidade')
+        .setLabel('💨 Velocidade')
+        .setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder()
+        .setCustomId('horses:rankingType:aceleracao')
+        .setLabel('🔥 Aceleração')
+        .setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder()
+        .setCustomId('horses:rankingType:vida')
+        .setLabel('❤️ Vida')
+        .setStyle(ButtonStyle.Secondary),
+    ),
+    new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId('horses:rankingType:estamina')
+        .setLabel('⚡ Estamina')
+        .setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder()
+        .setCustomId('horses:rankingType:coragem')
+        .setLabel('🛡️ Coragem')
+        .setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder()
+        .setCustomId('horses:rankingType:agilidade')
+        .setLabel('🪶 Agilidade')
+        .setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder()
+        .setCustomId('horses:panel')
+        .setLabel('🏠 Voltar')
+        .setStyle(ButtonStyle.Secondary),
+    ),
+  ];
+
+  return { embed, rows };
+}
+
+function buildRankingPage(field = 'total', page = 0) {
+  const meta = attributeMeta(field);
+  const ranked = rankingByField(field);
+  const pageSize = 15;
+  const totalPages = Math.max(1, Math.ceil(ranked.length / pageSize));
+  const safePage = Math.min(Math.max(page, 0), totalPages - 1);
+  const start = safePage * pageSize;
+  const slice = ranked.slice(start, start + pageSize);
+
+  const lines = slice.map((horse, index) => {
+    const position = start + index + 1;
+    return `**${position}º. ${horse.nome}** — ${meta.label}: ${horse[field]} • Total ${horse.total}`;
+  });
+
+  const embed = new EmbedBuilder()
+    .setTitle(`${meta.emoji} Ranking • ${meta.label}`)
+    .setDescription(
+      `Página **${safePage + 1}/${totalPages}**\n\n${lines.join('\n') || 'Nenhum cavalo encontrado.'}`,
+    );
+
+  const rows = [
+    new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId(`horses:rankingPage:${field}:${Math.max(0, safePage - 1)}`)
+        .setLabel('⬅️ Anterior')
+        .setStyle(ButtonStyle.Secondary)
+        .setDisabled(safePage === 0),
+      new ButtonBuilder()
+        .setCustomId(`horses:rankingPage:${field}:${Math.min(totalPages - 1, safePage + 1)}`)
+        .setLabel('Próxima ➡️')
+        .setStyle(ButtonStyle.Secondary)
+        .setDisabled(safePage >= totalPages - 1),
+      new ButtonBuilder()
+        .setCustomId('horses:rankingMenu')
+        .setLabel('🏆 Tipos')
+        .setStyle(ButtonStyle.Primary),
+      new ButtonBuilder()
+        .setCustomId('horses:panel')
+        .setLabel('🏠 Painel')
+        .setStyle(ButtonStyle.Secondary),
+    ),
+  ];
+
+  return { embed, rows };
+}
+
+function buildCompareEmbed(horseA, horseB) {
+  const rows = [
+    { label: '❤️ Vida', a: safeNumber(horseA.vida), b: safeNumber(horseB.vida) },
+    { label: '⚡ Estamina', a: safeNumber(horseA.estamina), b: safeNumber(horseB.estamina) },
+    { label: '🛡️ Coragem', a: safeNumber(horseA.coragem), b: safeNumber(horseB.coragem) },
+    { label: '🪶 Agilidade', a: safeNumber(horseA.agilidade), b: safeNumber(horseB.agilidade) },
+    { label: '💨 Velocidade', a: safeNumber(horseA.velocidade), b: safeNumber(horseB.velocidade) },
+    { label: '🔥 Aceleração', a: safeNumber(horseA.aceleracao), b: safeNumber(horseB.aceleracao) },
+    { label: '📊 Total', a: safeNumber(horseA.total), b: safeNumber(horseB.total) },
+  ];
+
+  const lines = rows.map((row) => {
+    let winner = 'Empate';
+    if (row.a > row.b) winner = horseA.nome;
+    if (row.b > row.a) winner = horseB.nome;
+    return `**${row.label}**\n${horseA.nome}: **${row.a}**\n${horseB.nome}: **${row.b}**\nVantagem: **${winner}**`;
+  });
+
+  const embed = new EmbedBuilder()
+    .setTitle('⚔️ Comparação de cavalos')
+    .setDescription(`**${horseA.nome}** vs **${horseB.nome}**`)
+    .addFields(
+      { name: '🌦️ Clima', value: `${horseA.nome}: ${horseA.clima}\n${horseB.nome}: ${horseB.clima}`, inline: true },
+      { name: '⚖️ Peso', value: `${horseA.nome}: ${horseA.peso}\n${horseB.nome}: ${horseB.peso}`, inline: true },
+      { name: '💰 Valor', value: `${horseA.nome}: ${horseA.valorTexto}\n${horseB.nome}: ${horseB.valorTexto}`, inline: true },
+      ...lines.map((text) => ({ name: '\u200b', value: text, inline: true })),
+    );
+
+  return embed;
+}
+
 function findHorseById(id) {
   return horses.find((horse) => horse.id === id);
 }
@@ -223,6 +391,17 @@ function searchHorses(term) {
       );
     }),
   );
+}
+
+function findHorseByNameLoose(name) {
+  const term = normalizeText(name);
+  if (!term) return null;
+
+  const exact = horses.find((horse) => normalizeText(horse.nome) === term);
+  if (exact) return exact;
+
+  const contains = sortByName(horses).find((horse) => normalizeText(horse.nome).includes(term));
+  return contains || null;
 }
 
 async function sendHorsePanel(interaction) {
@@ -271,9 +450,41 @@ async function handleHorseInteraction(interaction) {
       return interaction.showModal(modal);
     }
 
+    if (id === 'horses:compare') {
+      const modal = new ModalBuilder()
+        .setCustomId('horses:compareModal')
+        .setTitle('Comparar cavalos');
+
+      const horseA = new TextInputBuilder()
+        .setCustomId('horseA')
+        .setLabel('Primeiro cavalo')
+        .setPlaceholder('Ex.: Arabian')
+        .setStyle(TextInputStyle.Short)
+        .setRequired(true)
+        .setMaxLength(80);
+
+      const horseB = new TextInputBuilder()
+        .setCustomId('horseB')
+        .setLabel('Segundo cavalo')
+        .setPlaceholder('Ex.: Turkoman')
+        .setStyle(TextInputStyle.Short)
+        .setRequired(true)
+        .setMaxLength(80);
+
+      modal.addComponents(
+        new ActionRowBuilder().addComponents(horseA),
+        new ActionRowBuilder().addComponents(horseB),
+      );
+      return interaction.showModal(modal);
+    }
+
     if (id === 'horses:ranking') {
-      const embed = buildSimpleListEmbed('🏆 Top cavalos por total', topHorsesByTotal(15));
+      const embed = buildSimpleListEmbed('🏆 Top 15 cavalos por total', topHorsesByTotal(15));
       const row = new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+          .setCustomId('horses:rankingMenu')
+          .setLabel('🏆 Ranking completo')
+          .setStyle(ButtonStyle.Primary),
         new ButtonBuilder()
           .setCustomId('horses:panel')
           .setLabel('🏠 Voltar')
@@ -281,6 +492,24 @@ async function handleHorseInteraction(interaction) {
       );
 
       return interaction.update({ embeds: [embed], components: [row] });
+    }
+
+    if (id === 'horses:rankingMenu') {
+      const { embed, rows } = buildRankingMenu();
+      return interaction.update({ embeds: [embed], components: rows });
+    }
+
+    if (id.startsWith('horses:rankingType:')) {
+      const field = id.split(':')[2];
+      const { embed, rows } = buildRankingPage(field, 0);
+      return interaction.update({ embeds: [embed], components: rows });
+    }
+
+    if (id.startsWith('horses:rankingPage:')) {
+      const [, , field, pageRaw] = id.split(':');
+      const page = Number(pageRaw || 0);
+      const { embed, rows } = buildRankingPage(field, page);
+      return interaction.update({ embeds: [embed], components: rows });
     }
 
     if (id === 'horses:climate') {
@@ -330,6 +559,10 @@ async function handleHorseInteraction(interaction) {
         .setLabel('🔎 Pesquisar')
         .setStyle(ButtonStyle.Primary),
       new ButtonBuilder()
+        .setCustomId('horses:compare')
+        .setLabel('⚔️ Comparar')
+        .setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder()
         .setCustomId('horses:panel')
         .setLabel('🏠 Painel')
         .setStyle(ButtonStyle.Secondary),
@@ -357,6 +590,10 @@ async function handleHorseInteraction(interaction) {
           .setLabel('📋 Ver lista')
           .setStyle(ButtonStyle.Secondary),
         new ButtonBuilder()
+          .setCustomId('horses:compare')
+          .setLabel('⚔️ Comparar')
+          .setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder()
           .setCustomId('horses:panel')
           .setLabel('🏠 Painel')
           .setStyle(ButtonStyle.Secondary),
@@ -377,7 +614,7 @@ async function handleHorseInteraction(interaction) {
         limited.map((horse) => ({
           label: horse.nome.slice(0, 100),
           value: horse.id,
-          description: `Total ${horse.total} • ${horse.clima} • ${horse.valorTexto}`.slice(0, 100),
+          description: formatHorseSummary(horse).slice(0, 100),
         })),
       );
 
@@ -396,6 +633,43 @@ async function handleHorseInteraction(interaction) {
             .setStyle(ButtonStyle.Secondary),
         ),
       ],
+      ephemeral: true,
+    });
+  }
+
+  if (interaction.isModalSubmit() && interaction.customId === 'horses:compareModal') {
+    const horseAQuery = interaction.fields.getTextInputValue('horseA');
+    const horseBQuery = interaction.fields.getTextInputValue('horseB');
+
+    const horseA = findHorseByNameLoose(horseAQuery);
+    const horseB = findHorseByNameLoose(horseBQuery);
+
+    if (!horseA || !horseB) {
+      const missing = [];
+      if (!horseA) missing.push(`"${horseAQuery}"`);
+      if (!horseB) missing.push(`"${horseBQuery}"`);
+
+      return interaction.reply({
+        content: `Não consegui localizar ${missing.join(' e ')}. Tente digitar o nome mais próximo do cavalo.`,
+        ephemeral: true,
+      });
+    }
+
+    const embed = buildCompareEmbed(horseA, horseB);
+    const row = new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId('horses:compare')
+        .setLabel('⚔️ Nova comparação')
+        .setStyle(ButtonStyle.Primary),
+      new ButtonBuilder()
+        .setCustomId('horses:panel')
+        .setLabel('🏠 Painel')
+        .setStyle(ButtonStyle.Secondary),
+    );
+
+    return interaction.reply({
+      embeds: [embed],
+      components: [row],
       ephemeral: true,
     });
   }
