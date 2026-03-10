@@ -862,18 +862,20 @@ async function buildEmployeeSelectRow(guild, action) {
   const deposits = validDeposits(loadDeposits()).filter(d => d.guildId === guild.id);
   const uniqueIds = [...new Set(deposits.map(d => d.userId).filter(Boolean))];
 
-  let users = [];
-  for (const userId of uniqueIds) {
-    const member = guild.members.cache.get(userId) || await guild.members.fetch(userId).catch(() => null);
-    if (!member || member.user?.bot) continue;
-    const userTag = deposits.find(d => d.userId === userId)?.userTag || member.user.tag;
-    users.push({
-      id: userId,
-      label: (member.nickname || member.user.username || userTag).slice(0, 100),
-      description: String(userTag).slice(0, 100)
-    });
-  }
+let users = [];
 
+for (const userId of uniqueIds) {
+  const member = await guild.members.fetch(userId).catch(() => null);
+  if (!member || member.user?.bot) continue;
+
+  const userTag = deposits.find(d => d.userId === userId)?.userTag || member.user.tag;
+
+  users.push({
+    id: userId,
+    label: (member.nickname || member.user.username || userTag).slice(0, 100),
+    description: String(userTag).slice(0, 100)
+  });
+}
   users.sort((a, b) => a.label.toLowerCase().localeCompare(b.label.toLowerCase(), 'pt-BR'));
 
   const options = users.slice(0, 25).map(u => ({
