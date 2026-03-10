@@ -86,7 +86,7 @@ function buildColorBar(value, max, fillEmoji) {
   const safeValue = Math.max(0, Math.min(safeNumber(value), max));
   const filled = Math.round(safeValue);
   const empty = Math.max(0, max - filled);
-  return `${fillEmoji.repeat(filled)}${'⬜'.repeat(empty)} ${safeValue}/${max}`;
+  return `${fillEmoji.repeat(filled)}${'⬛'.repeat(empty)} ${safeValue}/${max}`;
 }
 
 function buildStarsFromTotal(total) {
@@ -362,7 +362,7 @@ function chunkLines(lines, chunkSize = 10) {
 
 function buildSimpleListEmbed(title, items) {
   const lines = items.map((horse, index) => {
-    return `**${index + 1}. ${horse.nome}** — Total ${horse.total} • ${horse.clima} • ${horse.valorTexto}`;
+    return `**${index + 1}. ${horse.nome}** — Total ${horse.total}/60 ${buildStarsFromTotal(horse.total)} • ${horse.clima} • ${horse.valorTexto}`;
   });
 
   const chunks = chunkLines(lines, 10);
@@ -602,6 +602,8 @@ async function handleHorseInteraction(interaction) {
     }
 
     if (id === 'horses:ranking') {
+      await interaction.deferUpdate();
+
       const embed = buildSimpleListEmbed('🏆 Top 15 cavalos por total', topHorsesByTotal(15));
       const row = new ActionRowBuilder().addComponents(
         new ButtonBuilder()
@@ -614,7 +616,7 @@ async function handleHorseInteraction(interaction) {
           .setStyle(ButtonStyle.Secondary),
       );
 
-      return interaction.update({ embeds: [embed], components: [row] });
+      return interaction.editReply({ embeds: [embed], components: [row] });
     }
 
     if (id === 'horses:rankingMenu') {
