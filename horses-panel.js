@@ -1,4 +1,3 @@
-
 const {
   ActionRowBuilder,
   ButtonBuilder,
@@ -79,20 +78,112 @@ function attributeMeta(field) {
   return map[field] || { label: field, emoji: '📊' };
 }
 
+function padRight(text, size) {
+  return String(text).padEnd(size, ' ');
+}
+
+function buildColorBar(value, max, fillEmoji) {
+  const safeValue = Math.max(0, Math.min(safeNumber(value), max));
+  const filled = Math.round(safeValue);
+  const empty = Math.max(0, max - filled);
+  return `${fillEmoji.repeat(filled)}${'⬜'.repeat(empty)} ${safeValue}/${max}`;
+}
+
+function statLine(label, value, max, emoji) {
+  return `${padRight(label, 12)} ${buildColorBar(value, max, emoji)}`;
+}
+
+function buildHorseStatsBlock(horse) {
+  const totalMax = 60;
+  return [
+    statLine('Vida', horse.vida, 10, '🟥'),
+    statLine('Estamina', horse.estamina, 10, '🟩'),
+    statLine('Coragem', horse.coragem, 10, '🟫'),
+    statLine('Agilidade', horse.agilidade, 10, '🟪'),
+    statLine('Velocidade', horse.velocidade, 10, '🟦'),
+    statLine('Aceleracao', horse.aceleracao, 10, '🟨'),
+    statLine('Total', horse.total, totalMax, '🟧'),
+  ].join('\n');
+}
+
+function buildCompareStatsBlock(horseA, horseB) {
+  const lines = [
+    {
+      label: 'Vida',
+      a: safeNumber(horseA.vida),
+      b: safeNumber(horseB.vida),
+      max: 10,
+      emoji: '🟥',
+    },
+    {
+      label: 'Estamina',
+      a: safeNumber(horseA.estamina),
+      b: safeNumber(horseB.estamina),
+      max: 10,
+      emoji: '🟩',
+    },
+    {
+      label: 'Coragem',
+      a: safeNumber(horseA.coragem),
+      b: safeNumber(horseB.coragem),
+      max: 10,
+      emoji: '🟫',
+    },
+    {
+      label: 'Agilidade',
+      a: safeNumber(horseA.agilidade),
+      b: safeNumber(horseB.agilidade),
+      max: 10,
+      emoji: '🟪',
+    },
+    {
+      label: 'Velocidade',
+      a: safeNumber(horseA.velocidade),
+      b: safeNumber(horseB.velocidade),
+      max: 10,
+      emoji: '🟦',
+    },
+    {
+      label: 'Aceleracao',
+      a: safeNumber(horseA.aceleracao),
+      b: safeNumber(horseB.aceleracao),
+      max: 10,
+      emoji: '🟨',
+    },
+    {
+      label: 'Total',
+      a: safeNumber(horseA.total),
+      b: safeNumber(horseB.total),
+      max: 60,
+      emoji: '🟧',
+    },
+  ];
+
+  return lines
+    .map((row) => {
+      let winner = 'Empate';
+      if (row.a > row.b) winner = horseA.nome;
+      if (row.b > row.a) winner = horseB.nome;
+
+      return [
+        `**${row.label}**`,
+        `${horseA.nome}: ${buildColorBar(row.a, row.max, row.emoji)}`,
+        `${horseB.nome}: ${buildColorBar(row.b, row.max, row.emoji)}`,
+        `Vantagem: **${winner}**`,
+      ].join('\n');
+    })
+    .join('\n\n');
+}
+
 function buildHorseEmbed(horse) {
+  const statsBlock = buildHorseStatsBlock(horse);
+
   return new EmbedBuilder()
     .setTitle(`🐎 ${horse.nome}`)
-    .setDescription('Consulta completa do cavalo selecionado.')
+    .setDescription(`Consulta completa do cavalo selecionado.\n\n\`\`\`\n${statsBlock}\n\`\`\``)
     .addFields(
-      { name: '❤️ Vida', value: String(horse.vida), inline: true },
-      { name: '⚡ Estamina', value: String(horse.estamina), inline: true },
-      { name: '🛡️ Coragem', value: String(horse.coragem), inline: true },
-      { name: '🪶 Agilidade', value: String(horse.agilidade), inline: true },
-      { name: '💨 Velocidade', value: String(horse.velocidade), inline: true },
-      { name: '🔥 Aceleração', value: String(horse.aceleracao), inline: true },
-      { name: '🌦️ Clima', value: horse.clima, inline: true },
-      { name: '📊 Total', value: String(horse.total), inline: true },
-      { name: '⚖️ Peso', value: String(horse.peso), inline: true },
+      { name: '🌦️ Clima', value: String(horse.clima || '-'), inline: true },
+      { name: '⚖️ Peso', value: String(horse.peso || '-'), inline: true },
       { name: '💰 Valor', value: horse.valorTexto || moneyBr(horse.valorNumero), inline: true },
     )
     .setFooter({ text: `ID interno: ${horse.id}` });
@@ -345,34 +436,28 @@ function buildRankingPage(field = 'total', page = 0) {
 }
 
 function buildCompareEmbed(horseA, horseB) {
-  const rows = [
-    { label: '❤️ Vida', a: safeNumber(horseA.vida), b: safeNumber(horseB.vida) },
-    { label: '⚡ Estamina', a: safeNumber(horseA.estamina), b: safeNumber(horseB.estamina) },
-    { label: '🛡️ Coragem', a: safeNumber(horseA.coragem), b: safeNumber(horseB.coragem) },
-    { label: '🪶 Agilidade', a: safeNumber(horseA.agilidade), b: safeNumber(horseB.agilidade) },
-    { label: '💨 Velocidade', a: safeNumber(horseA.velocidade), b: safeNumber(horseB.velocidade) },
-    { label: '🔥 Aceleração', a: safeNumber(horseA.aceleracao), b: safeNumber(horseB.aceleracao) },
-    { label: '📊 Total', a: safeNumber(horseA.total), b: safeNumber(horseB.total) },
-  ];
+  const statsBlock = buildCompareStatsBlock(horseA, horseB);
 
-  const lines = rows.map((row) => {
-    let winner = 'Empate';
-    if (row.a > row.b) winner = horseA.nome;
-    if (row.b > row.a) winner = horseB.nome;
-    return `**${row.label}**\n${horseA.nome}: **${row.a}**\n${horseB.nome}: **${row.b}**\nVantagem: **${winner}**`;
-  });
-
-  const embed = new EmbedBuilder()
+  return new EmbedBuilder()
     .setTitle('⚔️ Comparação de cavalos')
-    .setDescription(`**${horseA.nome}** vs **${horseB.nome}**`)
+    .setDescription(`**${horseA.nome}** vs **${horseB.nome}**\n\n${statsBlock}`)
     .addFields(
-      { name: '🌦️ Clima', value: `${horseA.nome}: ${horseA.clima}\n${horseB.nome}: ${horseB.clima}`, inline: true },
-      { name: '⚖️ Peso', value: `${horseA.nome}: ${horseA.peso}\n${horseB.nome}: ${horseB.peso}`, inline: true },
-      { name: '💰 Valor', value: `${horseA.nome}: ${horseA.valorTexto}\n${horseB.nome}: ${horseB.valorTexto}`, inline: true },
-      ...lines.map((text) => ({ name: '\u200b', value: text, inline: true })),
+      {
+        name: '🌦️ Clima',
+        value: `${horseA.nome}: ${horseA.clima}\n${horseB.nome}: ${horseB.clima}`,
+        inline: true,
+      },
+      {
+        name: '⚖️ Peso',
+        value: `${horseA.nome}: ${horseA.peso}\n${horseB.nome}: ${horseB.peso}`,
+        inline: true,
+      },
+      {
+        name: '💰 Valor',
+        value: `${horseA.nome}: ${horseA.valorTexto}\n${horseB.nome}: ${horseB.valorTexto}`,
+        inline: true,
+      },
     );
-
-  return embed;
 }
 
 function findHorseById(id) {
