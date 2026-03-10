@@ -25,6 +25,7 @@ const cfgPath = fs.existsSync(path.join(__dirname, 'config.local.json'))
   : './config.json';
 
 const cfg = require(cfgPath);
+const { sendHorsePanel, handleHorseInteraction } = require('./horses-panel');
 
 
 // =====================
@@ -796,6 +797,33 @@ function supplierManageRow(supplierId) {
 
 
 const MANAGEMENT_PANEL_CHANNEL_ID = '1478533108864127198';
+const HORSES_PANEL_CHANNEL_ID = '1480725127145717792';
+
+function horsesPanelRows() {
+  return [
+    new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId('horses_open_panel')
+        .setLabel('Abrir Painel de Cavalos')
+        .setEmoji('🐎')
+        .setStyle(ButtonStyle.Primary)
+    )
+  ];
+}
+
+async function ensureHorsesPanel() {
+  const text =
+    '🐎 **PAINEL DE CAVALOS**\n\n' +
+    'Consulta rápida e prática dos cavalos do Haras.\n' +
+    'Use o botão abaixo para abrir o painel com busca, lista, top total e filtro por clima.';
+
+  await upsertPanelMessage({
+    key: 'horses_panel',
+    channelId: HORSES_PANEL_CHANNEL_ID,
+    content: text,
+    components: horsesPanelRows()
+  });
+}
 
 function managementPanelRows() {
   return [
@@ -1489,6 +1517,7 @@ client.once(Events.ClientReady, async () => {
   await ensureSuppliersPanel();
   await ensureAbsencePanel();
   await ensureManagementPanel();
+  await ensureHorsesPanel();
 
   for (const guild of client.guilds.cache.values()) {
     await syncAllFarmThreadsVisibility(guild).catch((e) => {
@@ -1531,6 +1560,18 @@ try {
 }
 
   try {
+    if (interaction.isButton() && interaction.customId === 'horses_open_panel') {
+      return sendHorsePanel(interaction);
+    }
+
+    if (
+      (interaction.isButton() && interaction.customId.startsWith('horses:')) ||
+      (interaction.isStringSelectMenu() && interaction.customId.startsWith('horses:')) ||
+      (interaction.isModalSubmit() && interaction.customId.startsWith('horses:'))
+    ) {
+      return handleHorseInteraction(interaction);
+    }
+
     // =====================
     // REGISTRO (botão + modal)
     // =====================
