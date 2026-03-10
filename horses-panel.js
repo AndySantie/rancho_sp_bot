@@ -424,6 +424,47 @@ function buildRankingMenu() {
   return { embed, rows };
 }
 
+function truncateForColumn(text, size) {
+  const value = String(text || '');
+  if (value.length <= size) return value;
+  if (size <= 3) return value.slice(0, size);
+  return `${value.slice(0, size - 3)}...`;
+}
+
+function buildRankingTable(field, slice, start) {
+  const meta = attributeMeta(field);
+  const positionWidth = 4;
+  const nameWidth = 24;
+  const valueWidth = field === 'total' ? 7 : 10;
+
+  const headerParts = [
+    padRight('#', positionWidth),
+    padRight('Cavalo', nameWidth),
+    padRight(field === 'total' ? 'Total' : meta.label, valueWidth),
+    'Estrelas',
+  ];
+
+  const lines = [headerParts.join(' ')];
+
+  slice.forEach((horse, index) => {
+    const position = `${start + index + 1}º`;
+    const name = truncateForColumn(horse.nome, nameWidth);
+    const value = field === 'total' ? `${horse.total}/60` : String(horse[field] ?? '-');
+    const stars = buildStarsFromTotal(horse.total);
+
+    lines.push(
+      [
+        padRight(position, positionWidth),
+        padRight(name, nameWidth),
+        padRight(value, valueWidth),
+        stars,
+      ].join(' ')
+    );
+  });
+
+  return `\`\`\`\n${lines.join('\n')}\n\`\`\``;
+}
+
 function buildRankingPage(field = 'total', page = 0) {
   const meta = attributeMeta(field);
   const ranked = rankingByField(field);
@@ -432,20 +473,11 @@ function buildRankingPage(field = 'total', page = 0) {
   const safePage = Math.min(Math.max(page, 0), totalPages - 1);
   const start = safePage * pageSize;
   const slice = ranked.slice(start, start + pageSize);
-
-  const lines = slice.map((horse, index) => {
-    const position = start + index + 1;
-    if (field === 'total') {
-      return `**${position}º. ${horse.nome}** — Total: ${horse.total}/60 ${buildStarsFromTotal(horse.total)}`;
-    }
-    return `**${position}º. ${horse.nome}** — ${meta.label}: ${horse[field]} • Total ${horse.total}/60 ${buildStarsFromTotal(horse.total)}`;
-  });
+  const table = buildRankingTable(field, slice, start);
 
   const embed = new EmbedBuilder()
     .setTitle(`${meta.emoji} Ranking • ${meta.label}`)
-    .setDescription(
-      `Página **${safePage + 1}/${totalPages}**\n\n${lines.join('\n') || 'Nenhum cavalo encontrado.'}`,
-    );
+    .setDescription(`Página **${safePage + 1}/${totalPages}**\n\n${table}`);
 
   const rows = [
     new ActionRowBuilder().addComponents(
