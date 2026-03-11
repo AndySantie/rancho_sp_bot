@@ -865,14 +865,21 @@ async function buildEmployeeSelectRow(guild, action) {
 let users = [];
 
 for (const userId of uniqueIds) {
-  const member = await guild.members.fetch(userId).catch(() => null);
-  if (!member || member.user?.bot) continue;
 
-  const userTag = deposits.find(d => d.userId === userId)?.userTag || member.user.tag;
+  const member = await guild.members.fetch(userId).catch(() => null);
+
+  const deposit = deposits.find(d => d.userId === userId);
+
+  const userTag = deposit?.userTag || member?.user?.tag || userId;
+
+  const label =
+    member?.nickname ||
+    member?.user?.username ||
+    userTag;
 
   users.push({
     id: userId,
-    label: (member.nickname || member.user.username || userTag).slice(0, 100),
+    label: String(label).slice(0, 100),
     description: String(userTag).slice(0, 100)
   });
 }
