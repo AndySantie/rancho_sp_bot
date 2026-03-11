@@ -211,6 +211,10 @@ async function editReplyAndAutoDelete(interaction, content, ms = 15000) {
 // =====================
 function loadDeposits() { return readJson(depositsFile, []); }
 function saveDeposits(d) { writeJson(depositsFile, d); }
+function saveDeposits(d) {
+  console.log("SALVANDO DEPOSITS:", depositsFile);
+  writeJson(depositsFile, d);
+}
 
 function loadPayments() { return readJson(paymentsFile, []); }
 function savePayments(d) { writeJson(paymentsFile, d); }
