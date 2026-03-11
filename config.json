@@ -124,6 +124,11 @@
       "price": 0.0
     },
     {
+      "key": "tomate",
+      "label": "Tomate",
+      "price": 0.0
+    },
+    {
       "key": "millefaliun",
       "label": "Millefaliun",
       "price": 0.0
