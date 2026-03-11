@@ -210,7 +210,6 @@ async function editReplyAndAutoDelete(interaction, content, ms = 15000) {
 // DATA ACCESS
 // =====================
 function loadDeposits() { return readJson(depositsFile, []); }
-function saveDeposits(d) { writeJson(depositsFile, d); }
 function saveDeposits(d) {
   console.log("SALVANDO DEPOSITS:", depositsFile);
   writeJson(depositsFile, d);
