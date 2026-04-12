@@ -267,6 +267,148 @@ function buildWeeklyStatusFromEmployees(employees, weekInfo) {
   });
 }
 
+
+const WEEKLY_FARM_ITEM_OPTIONS = [
+  { key: 'plantas', label: 'Plantas' },
+  { key: 'maca', label: 'Maçã' },
+  { key: 'cenoura', label: 'Cenoura' },
+  { key: 'fibra', label: 'Fibra' },
+  { key: 'madeira_seca', label: 'Madeira Seca' },
+  { key: 'casca_de_arvore', label: 'Casca de Árvore' },
+  { key: 'seiva', label: 'Seiva' }
+];
+
+function getWeeklyFarmItemLabel(key) {
+  return WEEKLY_FARM_ITEM_OPTIONS.find(item => item.key === key)?.label || key;
+}
+
+function normalizeWeeklyFarmItemKeys(values) {
+  if (!Array.isArray(values)) return [];
+  const valid = new Set(WEEKLY_FARM_ITEM_OPTIONS.map(item => item.key));
+  return [...new Set(values.filter(value => valid.has(value)))];
+}
+
+function weeklyFarmSelectMenu(selectedKeys = []) {
+  const normalized = normalizeWeeklyFarmItemKeys(selectedKeys);
+
+  return new ActionRowBuilder().addComponents(
+    new StringSelectMenuBuilder()
+      .setCustomId('weekly_farm_select_items')
+      .setPlaceholder('Escolha os itens da semana')
+      .setMinValues(1)
+      .setMaxValues(WEEKLY_FARM_ITEM_OPTIONS.length)
+      .addOptions(
+        WEEKLY_FARM_ITEM_OPTIONS.map(item => ({
+          label: item.label,
+          value: item.key,
+          default: normalized.includes(item.key)
+        }))
+      )
+  );
+}
+
+function weeklyFarmSelectionButtons() {
+  return new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId('weekly_farm_selection_continue')
+      .setLabel('Continuar Cadastro')
+      .setStyle(ButtonStyle.Success),
+    new ButtonBuilder()
+      .setCustomId('weekly_farm_selection_cancel')
+      .setLabel('Cancelar')
+      .setStyle(ButtonStyle.Secondary)
+  );
+}
+
+function formatWeeklyFarmSelectionPreview(selectedKeys = []) {
+  const normalized = normalizeWeeklyFarmItemKeys(selectedKeys);
+  const lines = normalized.length
+    ? normalized.map(key => `• ${getWeeklyFarmItemLabel(key)}`).join('\n')
+    : '• Nenhum item selecionado ainda';
+
+  return [
+    '🌾 **Cadastro do FARM semanal**',
+    '',
+    'Selecione os itens obrigatórios desta semana na lista abaixo.',
+    'Depois clique em **Continuar Cadastro** para definir as quantidades.',
+    '',
+    '**Itens selecionados**',
+    lines
+  ].join('\n');
+}
+
+function getWeeklyFarmQuantityChunks(selectedKeys = []) {
+  const normalized = normalizeWeeklyFarmItemKeys(selectedKeys);
+  const chunks = [];
+  for (let i = 0; i < normalized.length; i += 4) {
+    chunks.push(normalized.slice(i, i + 4));
+  }
+  return chunks;
+}
+
+function weeklyFarmQuantityModal(selectedKeys = [], chunkIndex = 0) {
+  const chunks = getWeeklyFarmQuantityChunks(selectedKeys);
+  const chunk = chunks[chunkIndex] || [];
+  const isLastChunk = chunkIndex === chunks.length - 1;
+
+  const modal = new ModalBuilder()
+    .setCustomId(`weekly_farm_qty_modal_submit:${chunkIndex}`)
+    .setTitle(`Quantidades FARM (${chunkIndex + 1}/${chunks.length || 1})`);
+
+  for (const key of chunk) {
+    const input = new TextInputBuilder()
+      .setCustomId(`weekly_qty_${key}`)
+      .setLabel(`Quantidade de ${getWeeklyFarmItemLabel(key)}`)
+      .setStyle(TextInputStyle.Short)
+      .setRequired(true)
+      .setPlaceholder('Ex: 100');
+
+    modal.addComponents(new ActionRowBuilder().addComponents(input));
+  }
+
+  if (isLastChunk) {
+    const observacoes = new TextInputBuilder()
+      .setCustomId('weekly_observacoes')
+      .setLabel('Descrição / Observações')
+      .setStyle(TextInputStyle.Paragraph)
+      .setRequired(false)
+      .setPlaceholder('Ex: Semana normal de produção.');
+
+    modal.addComponents(new ActionRowBuilder().addComponents(observacoes));
+  }
+
+  return modal;
+}
+
+function weeklyFarmQuantityContinueButtons(nextChunkIndex) {
+  return new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId(`weekly_farm_open_qty_chunk:${nextChunkIndex}`)
+      .setLabel('Continuar Quantidades')
+      .setStyle(ButtonStyle.Success),
+    new ButtonBuilder()
+      .setCustomId('weekly_farm_selection_cancel')
+      .setLabel('Cancelar')
+      .setStyle(ButtonStyle.Secondary)
+  );
+}
+
+function formatWeeklyFarmQuantityProgress(selectedKeys = [], quantities = {}, nextChunkIndex = 1) {
+  const normalized = normalizeWeeklyFarmItemKeys(selectedKeys);
+  const lines = normalized.map(key => {
+    const qty = quantities[key];
+    return `• **${getWeeklyFarmItemLabel(key)}**: ${qty ?? 'pendente'}`;
+  }).join('\n');
+
+  return [
+    '📝 **Quantidades parciais salvas**',
+    '',
+    lines || '• Nenhum item',
+    '',
+    `Clique em **Continuar Quantidades** para preencher a próxima parte (${nextChunkIndex + 1}/${getWeeklyFarmQuantityChunks(selectedKeys).length}).`
+  ].join('\n');
+}
+
 function weeklyItemsText(farmData) {
   const items = Array.isArray(farmData?.items) ? farmData.items : [];
   return items.length
@@ -675,49 +817,6 @@ function weeklyFarmManagerButtonsRowTwo() {
   );
 }
 
-function weeklyFarmModal() {
-  const modal = new ModalBuilder()
-    .setCustomId('weekly_farm_modal_submit')
-    .setTitle('Cadastrar FARM Semanal');
-
-  const plantas = new TextInputBuilder()
-    .setCustomId('weekly_plantas')
-    .setLabel('Quantidade de Plantas')
-    .setStyle(TextInputStyle.Short)
-    .setRequired(true)
-    .setPlaceholder('Ex: 600');
-
-  const madeiras = new TextInputBuilder()
-    .setCustomId('weekly_madeiras')
-    .setLabel('Quantidade de Madeiras')
-    .setStyle(TextInputStyle.Short)
-    .setRequired(true)
-    .setPlaceholder('Ex: 100');
-
-  const fibras = new TextInputBuilder()
-    .setCustomId('weekly_fibras')
-    .setLabel('Quantidade de Fibras')
-    .setStyle(TextInputStyle.Short)
-    .setRequired(true)
-    .setPlaceholder('Ex: 100');
-
-  const observacoes = new TextInputBuilder()
-    .setCustomId('weekly_observacoes')
-    .setLabel('Descrição / Observações')
-    .setStyle(TextInputStyle.Paragraph)
-    .setRequired(false)
-    .setPlaceholder('Ex: Semana normal de produção.');
-
-  modal.addComponents(
-    new ActionRowBuilder().addComponents(plantas),
-    new ActionRowBuilder().addComponents(madeiras),
-    new ActionRowBuilder().addComponents(fibras),
-    new ActionRowBuilder().addComponents(observacoes)
-  );
-
-  return modal;
-}
-
 function weeklyFarmReplaceButtons() {
   return new ActionRowBuilder().addComponents(
     new ButtonBuilder()
@@ -882,7 +981,7 @@ async function ensureManagerPanel() {
     '',
     '━━━━━━━━━━━━━━━━━━',
     '🌾 **FARM SEMANAL**',
-    '• **Cadastrar FARM Semanal**: cria ou substitui a meta da semana atual',
+    '• **Cadastrar FARM Semanal**: escolhe os itens da semana e depois define as quantidades',
     '• **Ver Preview FARM**: mostra a semana ativa e as isenções automáticas detectadas',
     '• **Publicar em Avisos**: envia o comunicado oficial e marca o cargo Funcionário',
     '• **Avisar no Chat Geral**: manda o aviso curto puxando o pessoal para #avisos',
@@ -1106,6 +1205,7 @@ async function publishWeeklyFarmToFolders(guild) {
 // =====================
 const session = new Map();
 const weeklyFarmPendingReplace = new Map();
+const weeklyFarmDrafts = new Map();
 
 client.on(Events.InteractionCreate, async (interaction) => {
   try {
@@ -1150,7 +1250,66 @@ if (interaction.isButton() && interaction.customId === 'weekly_farm_open_modal')
     return interaction.reply({ content: '❌ Apenas Gerência/Proprietário.', flags: 64 });
   }
 
-  return interaction.showModal(weeklyFarmModal());
+  const draft = weeklyFarmDrafts.get(interaction.user.id) || { selectedItems: [], quantities: {}, observacoes: '' };
+  return interaction.reply({
+    content: formatWeeklyFarmSelectionPreview(draft.selectedItems),
+    components: [weeklyFarmSelectMenu(draft.selectedItems), weeklyFarmSelectionButtons()],
+    flags: 64
+  });
+}
+
+
+if (interaction.isStringSelectMenu() && interaction.customId === 'weekly_farm_select_items') {
+  if (!isStaff(interaction.member)) {
+    return interaction.reply({ content: '❌ Apenas Gerência/Proprietário.', flags: 64 });
+  }
+
+  const draft = weeklyFarmDrafts.get(interaction.user.id) || { selectedItems: [], quantities: {}, observacoes: '' };
+  draft.selectedItems = normalizeWeeklyFarmItemKeys(interaction.values);
+  draft.quantities = {};
+  draft.observacoes = '';
+  weeklyFarmDrafts.set(interaction.user.id, draft);
+
+  return interaction.update({
+    content: formatWeeklyFarmSelectionPreview(draft.selectedItems),
+    components: [weeklyFarmSelectMenu(draft.selectedItems), weeklyFarmSelectionButtons()]
+  });
+}
+
+if (interaction.isButton() && interaction.customId === 'weekly_farm_selection_cancel') {
+  weeklyFarmDrafts.delete(interaction.user.id);
+  return interaction.reply({ content: '❌ Cadastro do FARM semanal cancelado.', flags: 64 });
+}
+
+if (interaction.isButton() && interaction.customId === 'weekly_farm_selection_continue') {
+  if (!isStaff(interaction.member)) {
+    return interaction.reply({ content: '❌ Apenas Gerência/Proprietário.', flags: 64 });
+  }
+
+  const draft = weeklyFarmDrafts.get(interaction.user.id);
+  if (!draft || !Array.isArray(draft.selectedItems) || !draft.selectedItems.length) {
+    return interaction.reply({ content: '⚠️ Primeiro selecione pelo menos um item para o FARM semanal.', flags: 64 });
+  }
+
+  return interaction.showModal(weeklyFarmQuantityModal(draft.selectedItems, 0));
+}
+
+if (interaction.isButton() && interaction.customId.startsWith('weekly_farm_open_qty_chunk:')) {
+  if (!isStaff(interaction.member)) {
+    return interaction.reply({ content: '❌ Apenas Gerência/Proprietário.', flags: 64 });
+  }
+
+  const draft = weeklyFarmDrafts.get(interaction.user.id);
+  if (!draft || !Array.isArray(draft.selectedItems) || !draft.selectedItems.length) {
+    return interaction.reply({ content: '⚠️ Não encontrei um cadastro semanal em andamento.', flags: 64 });
+  }
+
+  const chunkIndex = Number(interaction.customId.split(':')[1]);
+  if (!Number.isInteger(chunkIndex) || chunkIndex < 0) {
+    return interaction.reply({ content: '❌ Etapa inválida.', flags: 64 });
+  }
+
+  return interaction.showModal(weeklyFarmQuantityModal(draft.selectedItems, chunkIndex));
 }
 
 if (interaction.isButton() && interaction.customId === 'weekly_farm_view_current') {
@@ -1285,19 +1444,46 @@ if (interaction.isModalSubmit() && interaction.customId === 'register_modal_subm
 // =====================
 // MODAL FARM SEMANAL
 // =====================
-if (interaction.isModalSubmit() && interaction.customId === 'weekly_farm_modal_submit') {
+if (interaction.isModalSubmit() && interaction.customId.startsWith('weekly_farm_qty_modal_submit:')) {
   if (!isStaff(interaction.member)) {
     return interaction.reply({ content: '❌ Apenas Gerência/Proprietário.', flags: 64 });
   }
 
-  const plantas = Number(interaction.fields.getTextInputValue('weekly_plantas').trim());
-  const madeiras = Number(interaction.fields.getTextInputValue('weekly_madeiras').trim());
-  const fibras = Number(interaction.fields.getTextInputValue('weekly_fibras').trim());
-  const observacoes = interaction.fields.getTextInputValue('weekly_observacoes').trim();
+  const draft = weeklyFarmDrafts.get(interaction.user.id);
+  if (!draft || !Array.isArray(draft.selectedItems) || !draft.selectedItems.length) {
+    return interaction.reply({ content: '⚠️ Não encontrei um cadastro semanal em andamento.', flags: 64 });
+  }
 
-  const nums = [plantas, madeiras, fibras];
-  if (nums.some(n => !Number.isInteger(n) || n <= 0 || n > 1000000)) {
-    return interaction.reply({ content: '❌ Preencha Plantas, Madeiras e Fibras com números inteiros maiores que 0.', flags: 64 });
+  const chunkIndex = Number(interaction.customId.split(':')[1]);
+  const chunks = getWeeklyFarmQuantityChunks(draft.selectedItems);
+  const chunk = chunks[chunkIndex] || [];
+  const isLastChunk = chunkIndex === chunks.length - 1;
+
+  if (!Number.isInteger(chunkIndex) || chunkIndex < 0 || !chunk.length) {
+    return interaction.reply({ content: '❌ Etapa de quantidades inválida.', flags: 64 });
+  }
+
+  for (const key of chunk) {
+    const raw = interaction.fields.getTextInputValue(`weekly_qty_${key}`).trim();
+    const value = Number(raw);
+    if (!Number.isInteger(value) || value <= 0 || value > 1000000) {
+      return interaction.reply({ content: `❌ A quantidade de **${getWeeklyFarmItemLabel(key)}** deve ser um número inteiro maior que 0.`, flags: 64 });
+    }
+    draft.quantities[key] = value;
+  }
+
+  if (isLastChunk) {
+    draft.observacoes = interaction.fields.getTextInputValue('weekly_observacoes').trim();
+  }
+
+  weeklyFarmDrafts.set(interaction.user.id, draft);
+
+  if (!isLastChunk) {
+    return interaction.reply({
+      content: formatWeeklyFarmQuantityProgress(draft.selectedItems, draft.quantities, chunkIndex + 1),
+      components: [weeklyFarmQuantityContinueButtons(chunkIndex + 1)],
+      flags: 64
+    });
   }
 
   const weekInfo = getCurrentWeekInfo();
@@ -1307,12 +1493,11 @@ if (interaction.isModalSubmit() && interaction.customId === 'weekly_farm_modal_s
     endDate: weekInfo.endDate,
     createdAt: nowIso(),
     createdBy: interaction.user.id,
-    items: [
-      { nome: 'Plantas', quantidade: plantas },
-      { nome: 'Madeiras', quantidade: madeiras },
-      { nome: 'Fibras', quantidade: fibras }
-    ],
-    observacoes: observacoes || '',
+    items: draft.selectedItems.map(key => ({
+      nome: getWeeklyFarmItemLabel(key),
+      quantidade: draft.quantities[key]
+    })),
+    observacoes: draft.observacoes || '',
     status: 'ativo'
   };
 
@@ -1321,9 +1506,12 @@ if (interaction.isModalSubmit() && interaction.customId === 'weekly_farm_modal_s
 
   if (current?.weekId === weekInfo.weekId) {
     weeklyFarmPendingReplace.set(interaction.user.id, { farmData, weeklyStatus });
+    weeklyFarmDrafts.delete(interaction.user.id);
     return interaction.reply({
       content:
-        `⚠️ Já existe um FARM semanal cadastrado para **${weekInfo.weekId}**.\n\n` +
+        `⚠️ Já existe um FARM semanal cadastrado para **${weekInfo.weekId}**.
+
+` +
         `Se quiser trocar, clique em **Substituir cadastro da semana**.`,
       components: [weeklyFarmReplaceButtons()],
       flags: 64
@@ -1332,6 +1520,7 @@ if (interaction.isModalSubmit() && interaction.customId === 'weekly_farm_modal_s
 
   saveWeeklyFarm(farmData);
   saveWeeklyStatus(weeklyStatus);
+  weeklyFarmDrafts.delete(interaction.user.id);
 
   return interaction.reply({
     content: formatWeeklyFarmSummary(farmData, weeklyStatus) + '\n\n📌 Depois use o **#painel-gerencia** para publicar em avisos, chat geral ou pastas farm.',
