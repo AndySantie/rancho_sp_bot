@@ -208,10 +208,16 @@ function startOfWeekMonday(date = new Date()) {
   return d;
 }
 
-function endOfWeekSunday(date = new Date()) {
+function endOfWorkWeekFriday(date = new Date()) {
   const d = startOfWeekMonday(date);
-  d.setDate(d.getDate() + 6);
+  d.setDate(d.getDate() + 4);
   d.setHours(23, 59, 59, 999);
+  return d;
+}
+
+function addDays(date, days) {
+  const d = new Date(date);
+  d.setDate(d.getDate() + days);
   return d;
 }
 
@@ -226,9 +232,14 @@ function getISOWeekInfo(date = new Date()) {
 
 function getCurrentWeekInfo() {
   const now = new Date();
-  const start = startOfWeekMonday(now);
-  const end = endOfWeekSunday(now);
-  const iso = getISOWeekInfo(now);
+  const localDay = now.getDay(); // 0=domingo, 6=sábado
+  const referenceDate = (localDay === 0 || localDay === 6)
+    ? addDays(now, localDay === 6 ? 2 : 1)
+    : now;
+
+  const start = startOfWeekMonday(referenceDate);
+  const end = endOfWorkWeekFriday(referenceDate);
+  const iso = getISOWeekInfo(referenceDate);
   return {
     weekId: `${iso.year}-W${String(iso.week).padStart(2, '0')}`,
     startDate: ymd(start),
@@ -430,7 +441,7 @@ function weeklyItemsText(farmData) {
 function formatWeeklyFarmOfficialPost(farmData) {
   return [
     '🌾 **FARM SEMANAL — HARAS RANCHO SP**',
-    `📅 **Semana:** ${brDateFromYMD(farmData.startDate)} até ${brDateFromYMD(farmData.endDate)}`,
+    `📅 **Semana útil:** ${brDateFromYMD(farmData.startDate)} até ${brDateFromYMD(farmData.endDate)}`,
     '',
     '📦 **Itens obrigatórios**',
     weeklyItemsText(farmData),
@@ -453,7 +464,7 @@ function formatWeeklyFarmGeneralNotice(avisosChannelId) {
 function formatWeeklyFarmFolderPost(farmData) {
   return [
     '🌾 **META SEMANAL DO HARAS**',
-    `📅 **Semana:** ${brDateFromYMD(farmData.startDate)} até ${brDateFromYMD(farmData.endDate)}`,
+    `📅 **Semana útil:** ${brDateFromYMD(farmData.startDate)} até ${brDateFromYMD(farmData.endDate)}`,
     '',
     '📦 **Itens obrigatórios**',
     weeklyItemsText(farmData),
@@ -476,7 +487,7 @@ function formatWeeklyFarmSummary(farmData, weeklyStatus) {
 
   return (
     `✅ **FARM semanal cadastrado com sucesso!**\n\n` +
-    `📅 **Semana:** ${brDateFromYMD(farmData.startDate)} até ${brDateFromYMD(farmData.endDate)}\n` +
+    `📅 **Semana útil:** ${brDateFromYMD(farmData.startDate)} até ${brDateFromYMD(farmData.endDate)}\n` +
     `🆔 **ID da semana:** ${farmData.weekId}\n\n` +
     `📦 **Itens obrigatórios**\n${itemLines}\n\n` +
     `📝 **Observações**\n${farmData.observacoes || 'Sem observações.'}\n\n` +
