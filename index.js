@@ -44,6 +44,10 @@ const employeesFile = path.join(dataDir, 'employees.json');
 const weeklyFarmFile = path.join(dataDir, 'weekly_farm.json');
 const weeklyStatusFile = path.join(dataDir, 'weekly_status.json');
 
+const FALLBACK_AVISOS_CHANNEL_ID = '1477351720366637239';
+const FALLBACK_CHAT_GERAL_CHANNEL_ID = '1477351882421829856';
+const FALLBACK_FUNCIONARIO_ROLE_ID = '1477303771242430544';
+
 function ensureFile(file, defaultValue) {
   if (!fs.existsSync(file)) {
     fs.writeFileSync(file, JSON.stringify(defaultValue, null, 2), 'utf-8');
@@ -104,6 +108,52 @@ function isStaff(member) {
     (owner && member.roles.cache.has(owner)) ||
     (mgr && member.roles.cache.has(mgr))
   );
+}
+
+function channelMentionById(channelId) {
+  return channelId ? `<#${channelId}>` : 'canal configurado';
+}
+
+function roleMentionById(roleId) {
+  return roleId ? `<@&${roleId}>` : '';
+}
+
+async function findTextChannelByIdOrName(guild, id, names) {
+  if (id) {
+    const byId = guild.channels.cache.get(id) || await guild.channels.fetch(id).catch(() => null);
+    if (byId && byId.isTextBased()) return byId;
+  }
+
+  const wanted = (Array.isArray(names) ? names : []).map(x => String(x || '').toLowerCase());
+  return guild.channels.cache.find(ch => ch && ch.isTextBased?.() && wanted.includes(String(ch.name || '').toLowerCase())) || null;
+}
+
+async function getManagerPanelChannel(guild) {
+  return findTextChannelByIdOrName(
+    guild,
+    cfg.channels?.managerPanelChannelId || cfg.channels?.painelGerenciaChannelId || cfg.channels?.gerenciaPanelChannelId || null,
+    ['painel-gerencia', 'painel_gerencia']
+  );
+}
+
+async function getAvisosChannel(guild) {
+  return findTextChannelByIdOrName(
+    guild,
+    cfg.channels?.avisosChannelId || FALLBACK_AVISOS_CHANNEL_ID,
+    ['avisos']
+  );
+}
+
+async function getChatGeralChannel(guild) {
+  return findTextChannelByIdOrName(
+    guild,
+    cfg.channels?.chatGeralChannelId || FALLBACK_CHAT_GERAL_CHANNEL_ID,
+    ['chat-geral', 'chat_geral']
+  );
+}
+
+function getEmployeeRoleId() {
+  return cfg.roles?.employeeRoleId || FALLBACK_FUNCIONARIO_ROLE_ID;
 }
 
 // =====================
@@ -215,6 +265,49 @@ function buildWeeklyStatusFromEmployees(employees, weekInfo) {
       marcadoEm: (autoExempt || emp.isentoManual) ? now : null
     };
   });
+}
+
+function weeklyItemsText(farmData) {
+  const items = Array.isArray(farmData?.items) ? farmData.items : [];
+  return items.length
+    ? items.map(item => `• **${item.nome}**: ${item.quantidade}`).join('\n')
+    : '• Nenhum item cadastrado';
+}
+
+function formatWeeklyFarmOfficialPost(farmData) {
+  return [
+    '🌾 **FARM SEMANAL — HARAS RANCHO SP**',
+    `📅 **Semana:** ${brDateFromYMD(farmData.startDate)} até ${brDateFromYMD(farmData.endDate)}`,
+    '',
+    '📦 **Itens obrigatórios**',
+    weeklyItemsText(farmData),
+    '',
+    '📝 **Observações**',
+    farmData.observacoes || 'Sem observações.',
+    '',
+    roleMentionById(getEmployeeRoleId())
+  ].join('\n');
+}
+
+function formatWeeklyFarmGeneralNotice(avisosChannelId) {
+  return [
+    '🌾 A meta semanal do Haras Rancho SP foi atualizada em ' + channelMentionById(avisosChannelId) + '.',
+    '',
+    `${roleMentionById(getEmployeeRoleId())}, confiram os itens obrigatórios da semana.`
+  ].join('\n');
+}
+
+function formatWeeklyFarmFolderPost(farmData) {
+  return [
+    '🌾 **META SEMANAL DO HARAS**',
+    `📅 **Semana:** ${brDateFromYMD(farmData.startDate)} até ${brDateFromYMD(farmData.endDate)}`,
+    '',
+    '📦 **Itens obrigatórios**',
+    weeklyItemsText(farmData),
+    '',
+    '📝 **Observações**',
+    farmData.observacoes || 'Sem observações.'
+  ].join('\n');
 }
 
 function formatWeeklyFarmSummary(farmData, weeklyStatus) {
@@ -552,7 +645,7 @@ function confirmButtons() {
   );
 }
 
-function weeklyFarmButtonsRow() {
+function weeklyFarmManagerButtonsRowOne() {
   return new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId('weekly_farm_open_modal')
@@ -560,8 +653,25 @@ function weeklyFarmButtonsRow() {
       .setStyle(ButtonStyle.Secondary),
     new ButtonBuilder()
       .setCustomId('weekly_farm_view_current')
-      .setLabel('Ver FARM Semanal')
+      .setLabel('Ver Preview FARM')
       .setStyle(ButtonStyle.Primary)
+  );
+}
+
+function weeklyFarmManagerButtonsRowTwo() {
+  return new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId('weekly_farm_publish_avisos')
+      .setLabel('Publicar em Avisos')
+      .setStyle(ButtonStyle.Success),
+    new ButtonBuilder()
+      .setCustomId('weekly_farm_publish_chat_geral')
+      .setLabel('Avisar no Chat Geral')
+      .setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder()
+      .setCustomId('weekly_farm_send_folders')
+      .setLabel('Enviar para Pastas Farm')
+      .setStyle(ButtonStyle.Secondary)
   );
 }
 
@@ -633,7 +743,7 @@ function savePanels(p) {
   writeJson(panelsFile, p || {});
 }
 
-async function upsertPanelMessage({ key, channelId, content, components }) {
+async function upsertPanelMessage({ key, channelId, content, components, contentHint = null }) {
   if (!channelId) return;
 
   const channel = await client.channels.fetch(channelId).catch(() => null);
@@ -645,6 +755,11 @@ async function upsertPanelMessage({ key, channelId, content, components }) {
   let msg = null;
   if (old?.messageId) {
     msg = await channel.messages.fetch(old.messageId).catch(() => null);
+  }
+
+  if (!msg && contentHint) {
+    const recent = await channel.messages.fetch({ limit: 20 }).catch(() => null);
+    msg = recent?.find?.(m => m.author?.id === client.user?.id && typeof m.content === 'string' && m.content.includes(contentHint)) || null;
   }
 
   if (msg) {
@@ -728,14 +843,13 @@ async function ensureFarmGuidePanel() {
     '3) Depois do print, clique em **Registrar Farm** para continuar',
     '4) Selecione o item e informe a quantidade para concluir o registro',
     '',
-    '📅 **FARM semanal (Gerência)**',
-    '• Use **Cadastrar FARM Semanal** para definir a meta da semana',
-    '• A semana é automática: segunda até domingo',
-    '',
     '⚠️ **Regras rápidas**',
     `• Print vale **${mins} minutos**`,
     '• Print **não pode** ser reutilizado',
-    '• Se errar, chame a gerência'
+    '• Se errar, chame a gerência',
+    '',
+    '📋 **Meta semanal**',
+    '• A meta da semana fica no **#painel-gerencia** e depois pode ser enviada para as pastas.'
   ].join('\n');
 
   await upsertPanelMessage({
@@ -748,9 +862,41 @@ async function ensureFarmGuidePanel() {
           .setCustomId('create_farm_folder')
           .setLabel('Criar Pasta Farm')
           .setStyle(ButtonStyle.Primary)
-      ),
-      weeklyFarmButtonsRow()
-    ]
+      )
+    ],
+    contentHint: 'COMO REGISTRAR FARM'
+  });
+}
+
+async function ensureManagerPanel() {
+  const guild = client.guilds.cache.first();
+  if (!guild) return;
+
+  const channel = await getManagerPanelChannel(guild);
+  if (!channel) return;
+
+  const text = [
+    '📊 **PAINEL DE GERÊNCIA — HARAS RANCHO SP**',
+    '',
+    'Use esta área para definir, revisar e publicar o **FARM semanal** sem precisar digitar comandos.',
+    '',
+    '━━━━━━━━━━━━━━━━━━',
+    '🌾 **FARM SEMANAL**',
+    '• **Cadastrar FARM Semanal**: cria ou substitui a meta da semana atual',
+    '• **Ver Preview FARM**: mostra a semana ativa e as isenções automáticas detectadas',
+    '• **Publicar em Avisos**: envia o comunicado oficial e marca o cargo Funcionário',
+    '• **Avisar no Chat Geral**: manda o aviso curto puxando o pessoal para #avisos',
+    '• **Enviar para Pastas Farm**: publica a meta nas pastas privadas já existentes',
+    '━━━━━━━━━━━━━━━━━━',
+    '📌 Os demais controles atuais da gerência podem continuar sendo usados normalmente.'
+  ].join('\n');
+
+  await upsertPanelMessage({
+    key: 'manager_panel',
+    channelId: channel.id,
+    content: text,
+    components: [weeklyFarmManagerButtonsRowOne(), weeklyFarmManagerButtonsRowTwo()],
+    contentHint: 'PAINEL DE GERÊNCIA'
   });
 }
 
@@ -897,6 +1043,7 @@ client.once(Events.ClientReady, async () => {
   console.log(`✅ Logado como ${client.user.tag}`);
   await ensureRegisterPanel();
   await ensureFarmGuidePanel();
+  await ensureManagerPanel();
   // await ensureCommandsPanel();
   startRankingScheduler();
 });
@@ -911,6 +1058,48 @@ client.on(Events.GuildMemberAdd, async (member) => {
     console.error('Welcome error:', e);
   }
 });
+
+async function publishWeeklyFarmToAvisos(guild) {
+  const current = loadWeeklyFarm();
+  if (!current?.weekId) return { ok: false, message: '⚠️ Ainda não existe FARM semanal cadastrado.' };
+
+  const channel = await getAvisosChannel(guild);
+  if (!channel) return { ok: false, message: '⚠️ Canal #avisos não encontrado/configurado.' };
+
+  await channel.send({ content: formatWeeklyFarmOfficialPost(current) });
+  return { ok: true, message: `✅ FARM semanal publicado em ${channel.toString()}.`, channelId: channel.id };
+}
+
+async function publishWeeklyFarmToChatGeral(guild) {
+  const current = loadWeeklyFarm();
+  if (!current?.weekId) return { ok: false, message: '⚠️ Ainda não existe FARM semanal cadastrado.' };
+
+  const channel = await getChatGeralChannel(guild);
+  if (!channel) return { ok: false, message: '⚠️ Canal #chat-geral não encontrado/configurado.' };
+
+  const avisos = await getAvisosChannel(guild);
+  await channel.send({ content: formatWeeklyFarmGeneralNotice(avisos?.id || cfg.channels?.avisosChannelId || FALLBACK_AVISOS_CHANNEL_ID) });
+  return { ok: true, message: `✅ Aviso curto enviado em ${channel.toString()}.`, channelId: channel.id };
+}
+
+async function publishWeeklyFarmToFolders(guild) {
+  const current = loadWeeklyFarm();
+  if (!current?.weekId) return { ok: false, message: '⚠️ Ainda não existe FARM semanal cadastrado.' };
+
+  const channels = guild.channels.cache.filter(ch =>
+    ch && ch.type === ChannelType.GuildText && String(ch.name || '').toLowerCase().startsWith('farm-')
+  );
+
+  if (!channels.size) return { ok: false, message: '⚠️ Não encontrei pastas farm para enviar.' };
+
+  let sent = 0;
+  for (const [, ch] of channels) {
+    const ok = await ch.send({ content: formatWeeklyFarmFolderPost(current) }).then(() => true).catch(() => false);
+    if (ok) sent += 1;
+  }
+
+  return { ok: sent > 0, message: sent > 0 ? `✅ Meta semanal enviada para **${sent}** pasta(s) farm.` : '⚠️ Não consegui enviar para nenhuma pasta farm.' };
+}
 
 // =====================
 // MAIN
@@ -976,6 +1165,33 @@ if (interaction.isButton() && interaction.customId === 'weekly_farm_view_current
 
   const status = loadWeeklyStatus().filter(x => x.weekId === current.weekId);
   return interaction.reply({ content: formatWeeklyFarmSummary(current, status), flags: 64 });
+}
+
+if (interaction.isButton() && interaction.customId === 'weekly_farm_publish_avisos') {
+  if (!isStaff(interaction.member)) {
+    return interaction.reply({ content: '❌ Apenas Gerência/Proprietário.', flags: 64 });
+  }
+
+  const result = await publishWeeklyFarmToAvisos(interaction.guild);
+  return interaction.reply({ content: result.message, flags: 64 });
+}
+
+if (interaction.isButton() && interaction.customId === 'weekly_farm_publish_chat_geral') {
+  if (!isStaff(interaction.member)) {
+    return interaction.reply({ content: '❌ Apenas Gerência/Proprietário.', flags: 64 });
+  }
+
+  const result = await publishWeeklyFarmToChatGeral(interaction.guild);
+  return interaction.reply({ content: result.message, flags: 64 });
+}
+
+if (interaction.isButton() && interaction.customId === 'weekly_farm_send_folders') {
+  if (!isStaff(interaction.member)) {
+    return interaction.reply({ content: '❌ Apenas Gerência/Proprietário.', flags: 64 });
+  }
+
+  const result = await publishWeeklyFarmToFolders(interaction.guild);
+  return interaction.reply({ content: result.message, flags: 64 });
 }
 
 if (interaction.isButton() && interaction.customId === 'weekly_farm_replace_cancel') {
@@ -1118,7 +1334,7 @@ if (interaction.isModalSubmit() && interaction.customId === 'weekly_farm_modal_s
   saveWeeklyStatus(weeklyStatus);
 
   return interaction.reply({
-    content: formatWeeklyFarmSummary(farmData, weeklyStatus),
+    content: formatWeeklyFarmSummary(farmData, weeklyStatus) + '\n\n📌 Depois use o **#painel-gerencia** para publicar em avisos, chat geral ou pastas farm.',
     flags: 64
   });
 }
