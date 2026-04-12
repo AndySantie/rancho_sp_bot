@@ -72,6 +72,17 @@ ensureFile(employeesFile, []);
 ensureFile(weeklyFarmFile, {});
 ensureFile(weeklyStatusFile, []);
 
+const WEEKLY_FARM_TEMP_DELETE_MS = 10 * 60 * 1000;
+
+function scheduleInteractionReplyDeletion(interaction, delayMs = WEEKLY_FARM_TEMP_DELETE_MS) {
+  const timer = setTimeout(async () => {
+    try {
+      await interaction.deleteReply();
+    } catch {}
+  }, delayMs);
+  if (typeof timer.unref === 'function') timer.unref();
+}
+
 // =====================
 // HELPERS
 // =====================
@@ -1251,11 +1262,13 @@ if (interaction.isButton() && interaction.customId === 'weekly_farm_open_modal')
   }
 
   const draft = weeklyFarmDrafts.get(interaction.user.id) || { selectedItems: [], quantities: {}, observacoes: '' };
-  return interaction.reply({
+  await interaction.reply({
     content: formatWeeklyFarmSelectionPreview(draft.selectedItems),
     components: [weeklyFarmSelectMenu(draft.selectedItems), weeklyFarmSelectionButtons()],
     flags: 64
   });
+  scheduleInteractionReplyDeletion(interaction);
+  return;
 }
 
 
@@ -1270,15 +1283,19 @@ if (interaction.isStringSelectMenu() && interaction.customId === 'weekly_farm_se
   draft.observacoes = '';
   weeklyFarmDrafts.set(interaction.user.id, draft);
 
-  return interaction.update({
+  await interaction.update({
     content: formatWeeklyFarmSelectionPreview(draft.selectedItems),
     components: [weeklyFarmSelectMenu(draft.selectedItems), weeklyFarmSelectionButtons()]
   });
+  scheduleInteractionReplyDeletion(interaction);
+  return;
 }
 
 if (interaction.isButton() && interaction.customId === 'weekly_farm_selection_cancel') {
   weeklyFarmDrafts.delete(interaction.user.id);
-  return interaction.reply({ content: '❌ Cadastro do FARM semanal cancelado.', flags: 64 });
+  await interaction.reply({ content: '❌ Cadastro do FARM semanal cancelado.', flags: 64 });
+  scheduleInteractionReplyDeletion(interaction);
+  return;
 }
 
 if (interaction.isButton() && interaction.customId === 'weekly_farm_selection_continue') {
@@ -1323,7 +1340,9 @@ if (interaction.isButton() && interaction.customId === 'weekly_farm_view_current
   }
 
   const status = loadWeeklyStatus().filter(x => x.weekId === current.weekId);
-  return interaction.reply({ content: formatWeeklyFarmSummary(current, status), flags: 64 });
+  await interaction.reply({ content: formatWeeklyFarmSummary(current, status), flags: 64 });
+  scheduleInteractionReplyDeletion(interaction);
+  return;
 }
 
 if (interaction.isButton() && interaction.customId === 'weekly_farm_publish_avisos') {
@@ -1332,7 +1351,9 @@ if (interaction.isButton() && interaction.customId === 'weekly_farm_publish_avis
   }
 
   const result = await publishWeeklyFarmToAvisos(interaction.guild);
-  return interaction.reply({ content: result.message, flags: 64 });
+  await interaction.reply({ content: result.message, flags: 64 });
+  scheduleInteractionReplyDeletion(interaction);
+  return;
 }
 
 if (interaction.isButton() && interaction.customId === 'weekly_farm_publish_chat_geral') {
@@ -1341,7 +1362,9 @@ if (interaction.isButton() && interaction.customId === 'weekly_farm_publish_chat
   }
 
   const result = await publishWeeklyFarmToChatGeral(interaction.guild);
-  return interaction.reply({ content: result.message, flags: 64 });
+  await interaction.reply({ content: result.message, flags: 64 });
+  scheduleInteractionReplyDeletion(interaction);
+  return;
 }
 
 if (interaction.isButton() && interaction.customId === 'weekly_farm_send_folders') {
@@ -1350,12 +1373,16 @@ if (interaction.isButton() && interaction.customId === 'weekly_farm_send_folders
   }
 
   const result = await publishWeeklyFarmToFolders(interaction.guild);
-  return interaction.reply({ content: result.message, flags: 64 });
+  await interaction.reply({ content: result.message, flags: 64 });
+  scheduleInteractionReplyDeletion(interaction);
+  return;
 }
 
 if (interaction.isButton() && interaction.customId === 'weekly_farm_replace_cancel') {
   weeklyFarmPendingReplace.delete(interaction.user.id);
-  return interaction.reply({ content: '❌ Substituição do FARM semanal cancelada.', flags: 64 });
+  await interaction.reply({ content: '❌ Substituição do FARM semanal cancelada.', flags: 64 });
+  scheduleInteractionReplyDeletion(interaction);
+  return;
 }
 
 if (interaction.isButton() && interaction.customId === 'weekly_farm_replace_confirm') {
@@ -1372,7 +1399,9 @@ if (interaction.isButton() && interaction.customId === 'weekly_farm_replace_conf
   saveWeeklyStatus(pending.weeklyStatus);
   weeklyFarmPendingReplace.delete(interaction.user.id);
 
-  return interaction.reply({ content: formatWeeklyFarmSummary(pending.farmData, pending.weeklyStatus), flags: 64 });
+  await interaction.reply({ content: formatWeeklyFarmSummary(pending.farmData, pending.weeklyStatus), flags: 64 });
+  scheduleInteractionReplyDeletion(interaction);
+  return;
 }
 
 // =====================
@@ -1479,11 +1508,13 @@ if (interaction.isModalSubmit() && interaction.customId.startsWith('weekly_farm_
   weeklyFarmDrafts.set(interaction.user.id, draft);
 
   if (!isLastChunk) {
-    return interaction.reply({
+    await interaction.reply({
       content: formatWeeklyFarmQuantityProgress(draft.selectedItems, draft.quantities, chunkIndex + 1),
       components: [weeklyFarmQuantityContinueButtons(chunkIndex + 1)],
       flags: 64
     });
+    scheduleInteractionReplyDeletion(interaction);
+    return;
   }
 
   const weekInfo = getCurrentWeekInfo();
@@ -1507,7 +1538,7 @@ if (interaction.isModalSubmit() && interaction.customId.startsWith('weekly_farm_
   if (current?.weekId === weekInfo.weekId) {
     weeklyFarmPendingReplace.set(interaction.user.id, { farmData, weeklyStatus });
     weeklyFarmDrafts.delete(interaction.user.id);
-    return interaction.reply({
+    await interaction.reply({
       content:
         `⚠️ Já existe um FARM semanal cadastrado para **${weekInfo.weekId}**.
 
@@ -1516,6 +1547,8 @@ if (interaction.isModalSubmit() && interaction.customId.startsWith('weekly_farm_
       components: [weeklyFarmReplaceButtons()],
       flags: 64
     });
+    scheduleInteractionReplyDeletion(interaction);
+    return;
   }
 
   saveWeeklyFarm(farmData);
