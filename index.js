@@ -41,6 +41,8 @@ const paymentsFile = path.join(dataDir, 'payments.json');
 const pricesFile = path.join(dataDir, 'prices.json');
 const panelsFile = path.join(dataDir, 'panels.json');
 const employeesFile = path.join(dataDir, 'employees.json');
+const weeklyFarmFile = path.join(dataDir, 'weekly_farm.json');
+const weeklyStatusFile = path.join(dataDir, 'weekly_status.json');
 
 function ensureFile(file, defaultValue) {
   if (!fs.existsSync(file)) {
@@ -63,6 +65,8 @@ ensureFile(paymentsFile, []);
 ensureFile(pricesFile, {});
 ensureFile(panelsFile, {});
 ensureFile(employeesFile, []);
+ensureFile(weeklyFarmFile, {});
+ensureFile(weeklyStatusFile, []);
 
 // =====================
 // HELPERS
@@ -114,6 +118,124 @@ function loadEmployees() {
 
 function saveEmployees(data) {
   writeJson(employeesFile, data);
+}
+
+function loadWeeklyFarm() {
+  const data = readJson(weeklyFarmFile, {});
+  return data && typeof data === 'object' ? data : {};
+}
+
+function saveWeeklyFarm(data) {
+  writeJson(weeklyFarmFile, data || {});
+}
+
+function loadWeeklyStatus() {
+  const data = readJson(weeklyStatusFile, []);
+  return Array.isArray(data) ? data : [];
+}
+
+function saveWeeklyStatus(data) {
+  writeJson(weeklyStatusFile, Array.isArray(data) ? data : []);
+}
+
+function startOfWeekMonday(date = new Date()) {
+  const d = new Date(date);
+  d.setHours(0, 0, 0, 0);
+  const day = d.getDay();
+  const diff = day === 0 ? -6 : 1 - day;
+  d.setDate(d.getDate() + diff);
+  return d;
+}
+
+function endOfWeekSunday(date = new Date()) {
+  const d = startOfWeekMonday(date);
+  d.setDate(d.getDate() + 6);
+  d.setHours(23, 59, 59, 999);
+  return d;
+}
+
+function getISOWeekInfo(date = new Date()) {
+  const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+  const dayNum = d.getUTCDay() || 7;
+  d.setUTCDate(d.getUTCDate() + 4 - dayNum);
+  const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+  const week = Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
+  return { year: d.getUTCFullYear(), week };
+}
+
+function getCurrentWeekInfo() {
+  const now = new Date();
+  const start = startOfWeekMonday(now);
+  const end = endOfWeekSunday(now);
+  const iso = getISOWeekInfo(now);
+  return {
+    weekId: `${iso.year}-W${String(iso.week).padStart(2, '0')}`,
+    startDate: ymd(start),
+    endDate: ymd(end)
+  };
+}
+
+function parseYMDToLocalDate(s) {
+  if (!s || typeof s !== 'string') return null;
+  const [year, month, day] = s.split('-').map(Number);
+  if (!year || !month || !day) return null;
+  return new Date(year, month - 1, day, 12, 0, 0, 0);
+}
+
+function getWeekdayNumberFromYMD(s) {
+  const d = parseYMDToLocalDate(s);
+  if (!d) return null;
+  return d.getDay();
+}
+
+function buildWeeklyStatusFromEmployees(employees, weekInfo) {
+  const now = nowIso();
+  const start = parseYMDToLocalDate(weekInfo.startDate);
+  const end = parseYMDToLocalDate(weekInfo.endDate);
+  if (!start || !end) return [];
+  end.setHours(23, 59, 59, 999);
+
+  return (Array.isArray(employees) ? employees : []).map(emp => {
+    const joined = parseYMDToLocalDate(emp.dataEntrada);
+    const enteredThisWeek = joined && joined >= start && joined <= end;
+    const weekday = joined ? joined.getDay() : null;
+    const autoExempt = Boolean(enteredThisWeek && weekday !== null && weekday >= 3);
+
+    return {
+      userId: emp.userId,
+      nome: emp.nome || '',
+      vulgo: emp.vulgo || '',
+      weekId: weekInfo.weekId,
+      dataEntrada: emp.dataEntrada || null,
+      isento: autoExempt || Boolean(emp.isentoManual),
+      tipoIsencao: emp.isentoManual ? 'manual' : (autoExempt ? 'automatica' : null),
+      motivo: emp.isentoManual
+        ? 'Isenção manual cadastrada em employees.json'
+        : (autoExempt ? 'Entrou na semana a partir de quarta-feira' : null),
+      marcadoEm: (autoExempt || emp.isentoManual) ? now : null
+    };
+  });
+}
+
+function formatWeeklyFarmSummary(farmData, weeklyStatus) {
+  const items = Array.isArray(farmData.items) ? farmData.items : [];
+  const itemLines = items.length
+    ? items.map(item => `• **${item.nome}**: ${item.quantidade}`).join('\n')
+    : '• Nenhum item cadastrado';
+
+  const autoExempt = (Array.isArray(weeklyStatus) ? weeklyStatus : []).filter(x => x.tipoIsencao === 'automatica');
+  const exemptText = autoExempt.length
+    ? autoExempt.map(x => `• **${x.nome || x.vulgo || x.userId}**${x.dataEntrada ? ` — entrou em ${brDateFromYMD(x.dataEntrada)}` : ''}`).join('\n')
+    : '• Nenhum funcionário entrou a partir de quarta nesta semana.';
+
+  return (
+    `✅ **FARM semanal cadastrado com sucesso!**\n\n` +
+    `📅 **Semana:** ${brDateFromYMD(farmData.startDate)} até ${brDateFromYMD(farmData.endDate)}\n` +
+    `🆔 **ID da semana:** ${farmData.weekId}\n\n` +
+    `📦 **Itens obrigatórios**\n${itemLines}\n\n` +
+    `📝 **Observações**\n${farmData.observacoes || 'Sem observações.'}\n\n` +
+    `⚠️ **Isenção automática detectada**\n${exemptText}`
+  );
 }
 
 function ensureEmployee(user) {
@@ -430,6 +552,75 @@ function confirmButtons() {
   );
 }
 
+function weeklyFarmButtonsRow() {
+  return new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId('weekly_farm_open_modal')
+      .setLabel('Cadastrar FARM Semanal')
+      .setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder()
+      .setCustomId('weekly_farm_view_current')
+      .setLabel('Ver FARM Semanal')
+      .setStyle(ButtonStyle.Primary)
+  );
+}
+
+function weeklyFarmModal() {
+  const modal = new ModalBuilder()
+    .setCustomId('weekly_farm_modal_submit')
+    .setTitle('Cadastrar FARM Semanal');
+
+  const plantas = new TextInputBuilder()
+    .setCustomId('weekly_plantas')
+    .setLabel('Quantidade de Plantas')
+    .setStyle(TextInputStyle.Short)
+    .setRequired(true)
+    .setPlaceholder('Ex: 600');
+
+  const madeiras = new TextInputBuilder()
+    .setCustomId('weekly_madeiras')
+    .setLabel('Quantidade de Madeiras')
+    .setStyle(TextInputStyle.Short)
+    .setRequired(true)
+    .setPlaceholder('Ex: 100');
+
+  const fibras = new TextInputBuilder()
+    .setCustomId('weekly_fibras')
+    .setLabel('Quantidade de Fibras')
+    .setStyle(TextInputStyle.Short)
+    .setRequired(true)
+    .setPlaceholder('Ex: 100');
+
+  const observacoes = new TextInputBuilder()
+    .setCustomId('weekly_observacoes')
+    .setLabel('Descrição / Observações')
+    .setStyle(TextInputStyle.Paragraph)
+    .setRequired(false)
+    .setPlaceholder('Ex: Semana normal de produção.');
+
+  modal.addComponents(
+    new ActionRowBuilder().addComponents(plantas),
+    new ActionRowBuilder().addComponents(madeiras),
+    new ActionRowBuilder().addComponents(fibras),
+    new ActionRowBuilder().addComponents(observacoes)
+  );
+
+  return modal;
+}
+
+function weeklyFarmReplaceButtons() {
+  return new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId('weekly_farm_replace_confirm')
+      .setLabel('Substituir cadastro da semana')
+      .setStyle(ButtonStyle.Danger),
+    new ButtonBuilder()
+      .setCustomId('weekly_farm_replace_cancel')
+      .setLabel('Cancelar')
+      .setStyle(ButtonStyle.Secondary)
+  );
+}
+
 // =====================
 // PAINÉIS AUTOMÁTICOS (igual #registro)
 // =====================
@@ -537,6 +728,10 @@ async function ensureFarmGuidePanel() {
     '3) Depois do print, clique em **Registrar Farm** para continuar',
     '4) Selecione o item e informe a quantidade para concluir o registro',
     '',
+    '📅 **FARM semanal (Gerência)**',
+    '• Use **Cadastrar FARM Semanal** para definir a meta da semana',
+    '• A semana é automática: segunda até domingo',
+    '',
     '⚠️ **Regras rápidas**',
     `• Print vale **${mins} minutos**`,
     '• Print **não pode** ser reutilizado',
@@ -553,7 +748,8 @@ async function ensureFarmGuidePanel() {
           .setCustomId('create_farm_folder')
           .setLabel('Criar Pasta Farm')
           .setStyle(ButtonStyle.Primary)
-      )
+      ),
+      weeklyFarmButtonsRow()
     ]
   });
 }
@@ -720,6 +916,7 @@ client.on(Events.GuildMemberAdd, async (member) => {
 // MAIN
 // =====================
 const session = new Map();
+const weeklyFarmPendingReplace = new Map();
 
 client.on(Events.InteractionCreate, async (interaction) => {
   try {
@@ -754,6 +951,53 @@ if (interaction.isButton() && interaction.customId === 'create_farm_folder') {
 // =====================
 if (interaction.isButton() && interaction.customId === 'register_farm') {
   return startArmazenarFlow(interaction, 'reply');
+}
+
+// =====================
+// FARM SEMANAL (GERÊNCIA)
+// =====================
+if (interaction.isButton() && interaction.customId === 'weekly_farm_open_modal') {
+  if (!isStaff(interaction.member)) {
+    return interaction.reply({ content: '❌ Apenas Gerência/Proprietário.', flags: 64 });
+  }
+
+  return interaction.showModal(weeklyFarmModal());
+}
+
+if (interaction.isButton() && interaction.customId === 'weekly_farm_view_current') {
+  if (!isStaff(interaction.member)) {
+    return interaction.reply({ content: '❌ Apenas Gerência/Proprietário.', flags: 64 });
+  }
+
+  const current = loadWeeklyFarm();
+  if (!current?.weekId) {
+    return interaction.reply({ content: '⚠️ Ainda não existe FARM semanal cadastrado.', flags: 64 });
+  }
+
+  const status = loadWeeklyStatus().filter(x => x.weekId === current.weekId);
+  return interaction.reply({ content: formatWeeklyFarmSummary(current, status), flags: 64 });
+}
+
+if (interaction.isButton() && interaction.customId === 'weekly_farm_replace_cancel') {
+  weeklyFarmPendingReplace.delete(interaction.user.id);
+  return interaction.reply({ content: '❌ Substituição do FARM semanal cancelada.', flags: 64 });
+}
+
+if (interaction.isButton() && interaction.customId === 'weekly_farm_replace_confirm') {
+  if (!isStaff(interaction.member)) {
+    return interaction.reply({ content: '❌ Apenas Gerência/Proprietário.', flags: 64 });
+  }
+
+  const pending = weeklyFarmPendingReplace.get(interaction.user.id);
+  if (!pending) {
+    return interaction.reply({ content: '⚠️ Não encontrei um cadastro pendente para substituir.', flags: 64 });
+  }
+
+  saveWeeklyFarm(pending.farmData);
+  saveWeeklyStatus(pending.weeklyStatus);
+  weeklyFarmPendingReplace.delete(interaction.user.id);
+
+  return interaction.reply({ content: formatWeeklyFarmSummary(pending.farmData, pending.weeklyStatus), flags: 64 });
 }
 
 // =====================
@@ -820,6 +1064,63 @@ if (interaction.isModalSubmit() && interaction.customId === 'register_modal_subm
   return interaction.editReply(
     `✅ Registrado com sucesso!\n• Cargo: **Funcionário**\n• Nick: **${nick}**`
   );
+}
+
+// =====================
+// MODAL FARM SEMANAL
+// =====================
+if (interaction.isModalSubmit() && interaction.customId === 'weekly_farm_modal_submit') {
+  if (!isStaff(interaction.member)) {
+    return interaction.reply({ content: '❌ Apenas Gerência/Proprietário.', flags: 64 });
+  }
+
+  const plantas = Number(interaction.fields.getTextInputValue('weekly_plantas').trim());
+  const madeiras = Number(interaction.fields.getTextInputValue('weekly_madeiras').trim());
+  const fibras = Number(interaction.fields.getTextInputValue('weekly_fibras').trim());
+  const observacoes = interaction.fields.getTextInputValue('weekly_observacoes').trim();
+
+  const nums = [plantas, madeiras, fibras];
+  if (nums.some(n => !Number.isInteger(n) || n <= 0 || n > 1000000)) {
+    return interaction.reply({ content: '❌ Preencha Plantas, Madeiras e Fibras com números inteiros maiores que 0.', flags: 64 });
+  }
+
+  const weekInfo = getCurrentWeekInfo();
+  const farmData = {
+    weekId: weekInfo.weekId,
+    startDate: weekInfo.startDate,
+    endDate: weekInfo.endDate,
+    createdAt: nowIso(),
+    createdBy: interaction.user.id,
+    items: [
+      { nome: 'Plantas', quantidade: plantas },
+      { nome: 'Madeiras', quantidade: madeiras },
+      { nome: 'Fibras', quantidade: fibras }
+    ],
+    observacoes: observacoes || '',
+    status: 'ativo'
+  };
+
+  const weeklyStatus = buildWeeklyStatusFromEmployees(loadEmployees(), weekInfo);
+  const current = loadWeeklyFarm();
+
+  if (current?.weekId === weekInfo.weekId) {
+    weeklyFarmPendingReplace.set(interaction.user.id, { farmData, weeklyStatus });
+    return interaction.reply({
+      content:
+        `⚠️ Já existe um FARM semanal cadastrado para **${weekInfo.weekId}**.\n\n` +
+        `Se quiser trocar, clique em **Substituir cadastro da semana**.`,
+      components: [weeklyFarmReplaceButtons()],
+      flags: 64
+    });
+  }
+
+  saveWeeklyFarm(farmData);
+  saveWeeklyStatus(weeklyStatus);
+
+  return interaction.reply({
+    content: formatWeeklyFarmSummary(farmData, weeklyStatus),
+    flags: 64
+  });
 }
 
 // =====================

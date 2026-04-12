@@ -1,22 +1,16 @@
 [
   {
-    "id": 1,
     "guildId": "1477302414062256240",
     "userId": "1095030991170568254",
     "userTag": "andysantie",
     "itemKey": "espinafre",
     "qty": 50,
     "proofUrl": "https://discord.com/channels/1477302414062256240/1477319513476169728/1477320162322415667",
-    "proofMessageId": "1477320162322415667",
     "createdAt": "2026-02-28T15:03:16.893Z",
-    "day": "2026-02-28",
-    "status": "PAGO",
-    "paymentId": "pay_1772295882968_9056",
-    "paidAt": "2026-02-28T16:24:42.968Z",
-    "paidBy": "andysantie"
+    "day": "2026-02-28"
   },
   {
-    "id": 2,
+    "id": 1,
     "guildId": "1477302414062256240",
     "userId": "1095030991170568254",
     "userTag": "andysantie",
@@ -32,7 +26,7 @@
     "paidBy": "andysantie"
   },
   {
-    "id": 3,
+    "id": 2,
     "guildId": "1477302414062256240",
     "userId": "1095030991170568254",
     "userTag": "andysantie",
@@ -48,7 +42,7 @@
     "paidBy": "andysantie"
   },
   {
-    "id": 4,
+    "id": 3,
     "guildId": "1477302414062256240",
     "userId": "1095030991170568254",
     "userTag": "andysantie",
@@ -64,7 +58,7 @@
     "paidBy": "andysantie"
   },
   {
-    "id": 5,
+    "id": 4,
     "guildId": "1477302414062256240",
     "day": "2026-03-09",
     "userId": "356294184359165955",
@@ -77,13 +71,13 @@
     "createdAt": "2026-03-09T01:57:05.090Z"
   },
   {
-    "id": 6,
+    "id": 5,
     "guildId": "1477302414062256240",
     "day": "2026-03-09",
     "userId": "356294184359165955",
     "userTag": ".heghenian",
     "itemKey": "espinafre",
-    "qty": 0,
+    "qty": null,
     "proofUrl": "https://cdn.discordapp.com/attachments/1480365584934768852/1480393916799914004/image.png?ex=69af83c6&is=69ae3246&hm=e46a4f1d32fc6bec643ab709a9224e933a6351c2f421d0c6d0570743134d928d&",
     "proofMessageId": "1480393917030465609",
     "status": "ABERTO",
